@@ -26,6 +26,58 @@ let fechaCalendario = new Date();
 let misPisos = JSON.parse(localStorage.getItem('misPisos_v2')) || [];
 let ultimoPisoActivo = localStorage.getItem('ultimoPisoActivo');
 
+// --- SISTEMA DE MODALES (Sustituye alert, confirm y prompt) ---
+window.mostrarModal = function({ titulo, mensaje, tipo = 'alert', valorInput = '' }) {
+    return new Promise((resolve) => {
+        const overlay = document.getElementById('iosModalOverlay');
+        const box = document.getElementById('iosModalBox');
+        const titleEl = document.getElementById('iosModalTitle');
+        const msgEl = document.getElementById('iosModalMessage');
+        const inputEl = document.getElementById('iosModalInput');
+        const btnCancel = document.getElementById('iosModalBtnCancel');
+        const btnConfirm = document.getElementById('iosModalBtnConfirm');
+
+        titleEl.innerText = titulo;
+        msgEl.innerText = mensaje;
+        
+        inputEl.classList.add('hidden');
+        btnCancel.classList.add('hidden');
+        inputEl.value = valorInput;
+        inputEl.type = (titulo.toLowerCase().includes('precio') || titulo.toLowerCase().includes('importe')) ? 'number' : 'text';
+
+        if (tipo === 'confirm' || tipo === 'prompt') {
+            btnCancel.classList.remove('hidden');
+        }
+        if (tipo === 'prompt') {
+            inputEl.classList.remove('hidden');
+        }
+
+        overlay.classList.add('active');
+
+        const close = () => {
+            overlay.classList.remove('active');
+            btnConfirm.onclick = null;
+            btnCancel.onclick = null;
+        };
+
+        btnConfirm.onclick = () => {
+            close();
+            if (tipo === 'prompt') resolve(inputEl.value);
+            else resolve(true);
+        };
+
+        btnCancel.onclick = () => {
+            close();
+            if (tipo === 'prompt') resolve(null);
+            else resolve(false);
+        };
+    });
+};
+window.mostrarAlerta = (t, m) => window.mostrarModal({titulo: t, mensaje: m, tipo: 'alert'});
+window.mostrarConfirmacion = (t, m) => window.mostrarModal({titulo: t, mensaje: m, tipo: 'confirm'});
+window.mostrarPrompt = (t, m, val) => window.mostrarModal({titulo: t, mensaje: m, tipo: 'prompt', valorInput: val});
+
+
 const pantallaCrear = document.getElementById('pantallaCrear');
 const pantallaUnirse = document.getElementById('pantallaUnirse');
 const pantallaMisPisos = document.getElementById('pantallaMisPisos');
@@ -86,7 +138,10 @@ window.quitarNombre = function(index) { nombresNuevos.splice(index, 1); actualiz
 
 document.getElementById('btnCrear').addEventListener('click', async () => {
     const nombrePiso = document.getElementById('nombrePiso').value; const boton = document.getElementById('btnCrear');
-    if (!nombrePiso || nombresNuevos.length === 0) return alert("Escribe el nombre del piso y añade inquilinos.");
+    if (!nombrePiso || nombresNuevos.length === 0) {
+        await window.mostrarAlerta("Datos incompletos", "Escribe el nombre del piso y añade al menos a un inquilino.");
+        return;
+    }
     boton.innerText = "Creando..."; boton.disabled = true;
     const idUnico = 'piso-' + Math.random().toString(36).substring(2, 8);
     try {
@@ -94,7 +149,7 @@ document.getElementById('btnCrear').addEventListener('click', async () => {
         pantallaCrear.classList.add('hidden'); pantallaUnirse.classList.remove('hidden');
         document.getElementById('nombrePiso').value = ""; nombresNuevos = []; actualizarListaNuevosNombres();
         await cargarPantallaUnirse(idUnico);
-    } catch (error) { alert("Error al guardar."); } finally { boton.innerText = "Crear Piso"; boton.disabled = false; }
+    } catch (error) { await window.mostrarAlerta("Error", "No se pudo guardar el piso."); } finally { boton.innerText = "Crear Piso"; boton.disabled = false; }
 });
 
 async function cargarPantallaUnirse(id) {
@@ -138,7 +193,7 @@ async function mostrarDashboard(nombre, id) {
 
 document.getElementById('btnEditarNombrePiso').addEventListener('click', async () => {
     const n = document.getElementById('tituloDashboard').innerText;
-    const nn = prompt("Nuevo nombre para este grupo:", n);
+    const nn = await window.mostrarPrompt("Editar Grupo", "Escribe un nuevo nombre para este grupo:", n);
     if (nn && nn.trim() !== "" && nn.trim() !== n) {
         await updateDoc(doc(db, "grupos", idPisoActual), { nombre_piso: nn.trim() });
         document.getElementById('tituloDashboard').innerText = nn.trim();
@@ -147,9 +202,14 @@ document.getElementById('btnEditarNombrePiso').addEventListener('click', async (
     }
 });
 
-document.getElementById('btnCopiarEnlace').addEventListener('click', () => {
+document.getElementById('btnCopiarEnlace').addEventListener('click', async () => {
     const enlace = `${window.location.origin}${window.location.pathname}?id=${idPisoActual}`;
-    navigator.clipboard.writeText(enlace).then(() => alert("Enlace copiado. ¡Pásalo por WhatsApp!")).catch(() => alert("Copia: " + enlace));
+    try {
+        await navigator.clipboard.writeText(enlace);
+        await window.mostrarAlerta("Enlace copiado", "¡Pásalo por WhatsApp a tus compañeros!");
+    } catch (e) {
+        await window.mostrarAlerta("Error al copiar", "Tu navegador bloqueó la copia. Cópialo manualmente: \n\n" + enlace);
+    }
 });
 
 // PESTAÑAS
@@ -216,10 +276,7 @@ function prepararFormularioGastos(gastoObj = null) {
             divInvolucrados.innerHTML += `<div class="manual-split-row"><span>${p}</span><input type="number" class="manual-importe" data-nombre="${p}" step="0.01" min="0" placeholder="0.00" value="${val}"></div>`;
         });
         
-        // Listener para matemáticas en vivo
-        document.querySelectorAll('.manual-importe').forEach(inp => {
-            inp.addEventListener('input', calcularFaltanteManual);
-        });
+        document.querySelectorAll('.manual-importe').forEach(inp => inp.addEventListener('input', calcularFaltanteManual));
         document.getElementById('importeGasto').addEventListener('input', calcularFaltanteManual);
         calcularFaltanteManual();
     }
@@ -234,7 +291,7 @@ function calcularFaltanteManual() {
     const info = document.getElementById('infoDivisionManual');
     const dif = total - sumaParcial;
     
-    if (dif > 0.001) info.innerHTML = `Faltan por asignar: <b>${dif.toFixed(2)}€</b> (Se auto-rellenará al guardar)`;
+    if (dif > 0.001) info.innerHTML = `Faltan por asignar: <b>${dif.toFixed(2)}€</b> (Se auto-rellenará)`;
     else if (dif < -0.001) info.innerHTML = `<span style="color:#ff453a;">Has asignado <b>${Math.abs(dif).toFixed(2)}€</b> de más.</span>`;
     else info.innerHTML = `<span style="color:#32d74b;">Cuadrado perfecto ✔️</span>`;
 }
@@ -245,26 +302,26 @@ window.abrirEditarGasto = function(gastoObj) {
     document.getElementById('conceptoGasto').value = gastoObj.concepto;
     document.getElementById('importeGasto').value = gastoObj.importe;
     
-    // Configurar tipo de división según los datos
-    if (gastoObj.involucrados.length > 0 && typeof gastoObj.involucrados[0] === 'object') {
-        document.getElementById('tipoDivisionGasto').value = 'manual';
-    } else {
-        document.getElementById('tipoDivisionGasto').value = 'iguales';
-    }
+    if (gastoObj.involucrados.length > 0 && typeof gastoObj.involucrados[0] === 'object') { document.getElementById('tipoDivisionGasto').value = 'manual'; } 
+    else { document.getElementById('tipoDivisionGasto').value = 'iguales'; }
     
     prepararFormularioGastos(gastoObj);
     document.getElementById('pagadorGasto').value = gastoObj.pagador;
     
-    document.getElementById('btnGuardarGasto').innerText = 'Actualizar Gasto';
+    document.getElementById('btnGuardarGasto').innerText = 'Actualizar';
     document.getElementById('btnEliminarGasto').classList.remove('hidden');
     document.getElementById('formGasto').classList.remove('hidden'); document.getElementById('btnMostrarFormGasto').classList.add('hidden');
     document.getElementById('formGasto').scrollIntoView({ behavior: 'smooth' });
 };
 
 document.getElementById('btnEliminarGasto').addEventListener('click', async () => {
-    if (!confirm("¿Eliminar este gasto?")) return;
+    const seguro = await window.mostrarConfirmacion("Eliminar Gasto", "¿Seguro que quieres eliminar este gasto? Afectará a las cuentas.");
+    if (!seguro) return;
+    
     const boton = document.getElementById('btnEliminarGasto'); boton.disabled = true;
-    try { await deleteDoc(doc(db, "grupos", idPisoActual, "gastos", idGastoEditando)); document.getElementById('btnCancelarGasto').click(); await cargarListaGastos(); } catch (error) { alert("Error."); } finally { boton.disabled = false; }
+    try { await deleteDoc(doc(db, "grupos", idPisoActual, "gastos", idGastoEditando)); document.getElementById('btnCancelarGasto').click(); await cargarListaGastos(); } 
+    catch (error) { await window.mostrarAlerta("Error", "No se pudo eliminar."); } 
+    finally { boton.disabled = false; }
 });
 
 document.getElementById('btnGuardarGasto').addEventListener('click', async () => {
@@ -273,39 +330,32 @@ document.getElementById('btnGuardarGasto').addEventListener('click', async () =>
     const pagador = document.getElementById('pagadorGasto').value; 
     const tipo = document.getElementById('tipoDivisionGasto').value;
     
-    if (!concepto || isNaN(importe)) return alert("Faltan concepto o importe.");
+    if (!concepto || isNaN(importe)) {
+        await window.mostrarAlerta("Datos incompletos", "Rellena el concepto y el importe."); return;
+    }
     
     let involucradosData = [];
     
     if (tipo === 'iguales') {
         const cbs = document.querySelectorAll('.gasto-cb:checked');
-        if(cbs.length === 0) return alert("Selecciona a alguien.");
-        involucradosData = Array.from(cbs).map(cb => cb.value); // Array de strings (Standard Tricount)
+        if(cbs.length === 0) { await window.mostrarAlerta("Aviso", "Selecciona al menos a una persona para dividir."); return; }
+        involucradosData = Array.from(cbs).map(cb => cb.value); 
     } else {
-        // Cálculo Manual Mágico
-        let sumaRellenados = 0;
-        let inputsVacios = [];
-        
+        let sumaRellenados = 0; let inputsVacios = [];
         document.querySelectorAll('.manual-importe').forEach(inp => {
             const val = parseFloat(inp.value);
             if (!isNaN(val) && val > 0) {
-                sumaRellenados += val;
-                involucradosData.push({ nombre: inp.getAttribute('data-nombre'), importe: val });
-            } else {
-                inputsVacios.push(inp.getAttribute('data-nombre'));
-            }
+                sumaRellenados += val; involucradosData.push({ nombre: inp.getAttribute('data-nombre'), importe: val });
+            } else { inputsVacios.push(inp.getAttribute('data-nombre')); }
         });
         
         const restante = importe - sumaRellenados;
         
-        if (restante < -0.01) return alert("Has asignado más dinero del que cuesta el gasto total.");
+        if (restante < -0.01) { await window.mostrarAlerta("Error de cálculo", "Has asignado más dinero del que cuesta el gasto total."); return; }
         if (restante > 0.01) {
-            if (inputsVacios.length === 0) return alert(`Faltan ${restante.toFixed(2)}€ por asignar.`);
-            // Repartir lo que falta entre los vacíos
+            if (inputsVacios.length === 0) { await window.mostrarAlerta("Error", `Faltan ${restante.toFixed(2)}€ por asignar.`); return; }
             const aCadaVacio = restante / inputsVacios.length;
-            inputsVacios.forEach(nombre => {
-                involucradosData.push({ nombre: nombre, importe: aCadaVacio });
-            });
+            inputsVacios.forEach(nombre => { involucradosData.push({ nombre: nombre, importe: aCadaVacio }); });
         }
     }
     
@@ -315,7 +365,7 @@ document.getElementById('btnGuardarGasto').addEventListener('click', async () =>
         if (idGastoEditando) await updateDoc(doc(db, "grupos", idPisoActual, "gastos", idGastoEditando), datosGasto);
         else { datosGasto.fecha = new Date().toISOString(); await addDoc(collection(db, "grupos", idPisoActual, "gastos"), datosGasto); }
         document.getElementById('btnCancelarGasto').click(); await cargarListaGastos();
-    } catch (error) { alert("Error al guardar."); } finally { boton.disabled = false; }
+    } catch (error) { await window.mostrarAlerta("Error", "Fallo al guardar."); } finally { boton.disabled = false; }
 });
 
 async function cargarListaGastos() {
@@ -333,7 +383,7 @@ async function cargarListaGastos() {
         querySnapshot.forEach((docSnap) => {
             const gasto = docSnap.data(); gasto.id = docSnap.id; gastosTotales.push(gasto); 
             const divGasto = document.createElement('div'); divGasto.className = 'item-lista';
-            const extraDetalle = typeof gasto.involucrados[0] === 'object' ? ' (División manual)' : '';
+            const extraDetalle = typeof gasto.involucrados[0] === 'object' ? ' (Manual)' : '';
             divGasto.innerHTML = `
                 <div class="item-info">
                     <span class="item-titulo">${gasto.concepto}</span>
@@ -354,14 +404,11 @@ function calcularBalancesYDeudas(gastos) {
     
     gastos.forEach(gasto => {
         if (balances[gasto.pagador] !== undefined) balances[gasto.pagador] += gasto.importe;
-        
         gasto.involucrados.forEach(inv => {
             if (typeof inv === 'string') {
                 const costePP = gasto.importe / gasto.involucrados.length;
                 if (balances[inv] !== undefined) balances[inv] -= costePP;
-            } else {
-                if (balances[inv.nombre] !== undefined) balances[inv.nombre] -= inv.importe;
-            }
+            } else { if (balances[inv.nombre] !== undefined) balances[inv.nombre] -= inv.importe; }
         });
     });
     
@@ -384,7 +431,7 @@ function calcularBalancesYDeudas(gastos) {
             let transfer = Math.min(deudor.cantidad, acreedor.cantidad);
             htmlDeudas += `
                 <div class="deuda-item">
-                    <span>💸 <b style="color:#f5f5f7;">${deudor.nombre}</b> debe a <b style="color:#f5f5f7;">${acreedor.nombre}</b>: <b style="color:#0a84ff;">${transfer.toFixed(2)}€</b></span>
+                    <span>💸 <b style="color:#f5f5f7;">${deudor.nombre}</b> debe a <b style="color:#f5f5f7;">${acreedor.nombre}</b>: <br><b style="color:#0a84ff; font-size:1.1em;">${transfer.toFixed(2)}€</b></span>
                     <button class="btn-bizum" onclick="registrarBizum('${deudor.nombre}', '${acreedor.nombre}', ${transfer})">Bizum hecho</button>
                 </div>`;
             deudor.cantidad -= transfer; acreedor.cantidad -= transfer;
@@ -394,46 +441,36 @@ function calcularBalancesYDeudas(gastos) {
     document.getElementById('listaDeudas').innerHTML = htmlDeudas;
 }
 
-// BIZUM: Cancela deuda inyectando un gasto inverso
 window.registrarBizum = async function(deudor, acreedor, cantidad) {
-    if (!confirm(`¿Confirmas que ${deudor} ha pagado ${cantidad.toFixed(2)}€ a ${acreedor}?`)) return;
+    const seguro = await window.mostrarConfirmacion("Confirmar Pago", `¿Confirmas que ${deudor} ha hecho un Bizum de ${cantidad.toFixed(2)}€ a ${acreedor}?`);
+    if (!seguro) return;
     try {
         await addDoc(collection(db, "grupos", idPisoActual, "gastos"), {
-            concepto: `💸 Bizum de ${deudor}`,
-            importe: parseFloat(cantidad),
-            pagador: deudor,
-            involucrados: [{ nombre: acreedor, importe: parseFloat(cantidad) }],
-            fecha: new Date().toISOString()
+            concepto: `💸 Bizum de ${deudor}`, importe: parseFloat(cantidad), pagador: deudor,
+            involucrados: [{ nombre: acreedor, importe: parseFloat(cantidad) }], fecha: new Date().toISOString()
         });
         await cargarListaGastos();
-    } catch(e) { alert("Error al registrar pago"); }
+    } catch(e) { await window.mostrarAlerta("Error", "No se pudo registrar el pago."); }
 };
 
 // --- MÓDULO LISTA COMPRA ---
 document.getElementById('btnAñadirArticulo').addEventListener('click', async () => {
-    const input = document.getElementById('inputNuevoArticulo');
-    const articulo = input.value.trim();
+    const input = document.getElementById('inputNuevoArticulo'); const articulo = input.value.trim();
     if (!articulo) return;
     input.value = '';
-    await addDoc(collection(db, "grupos", idPisoActual, "compra"), {
-        articulo: articulo, añadidoPor: nombreUsuario, fecha: new Date().toISOString()
-    });
-    cargarListaCompra(); // Refresh
+    await addDoc(collection(db, "grupos", idPisoActual, "compra"), { articulo: articulo, añadidoPor: nombreUsuario, fecha: new Date().toISOString() });
+    cargarListaCompra(); 
 });
 
 async function cargarListaCompra() {
     const listaHtml = document.getElementById('listaArticulos');
     const q = query(collection(db, "grupos", idPisoActual, "compra"), orderBy("fecha", "asc"));
     const querySnapshot = await getDocs(q);
-    
     if (querySnapshot.empty) {
         listaHtml.innerHTML = '<p style="color:#86868b; text-align:center;">Lista vacía.</p>'; 
-        document.getElementById('btnComprarSeleccionados').disabled = true;
-        return;
+        document.getElementById('btnComprarSeleccionados').disabled = true; return;
     }
-    
-    document.getElementById('btnComprarSeleccionados').disabled = false;
-    listaHtml.innerHTML = '';
+    document.getElementById('btnComprarSeleccionados').disabled = false; listaHtml.innerHTML = '';
     querySnapshot.forEach(docSnap => {
         const item = docSnap.data();
         listaHtml.innerHTML += `
@@ -443,50 +480,37 @@ async function cargarListaCompra() {
                     <span>${item.articulo} <small style="color:#86868b; display:block; font-size:0.8em;">Por ${item.añadidoPor}</small></span>
                 </label>
                 <button onclick="borrarArticulo('${docSnap.id}')" style="background:none; width:auto; margin:0; padding:5px; color:#ff453a; font-size:1.2em;">🗑️</button>
-            </div>
-        `;
+            </div>`;
     });
 }
 
-window.borrarArticulo = async function(id) {
-    await deleteDoc(doc(db, "grupos", idPisoActual, "compra", id));
-    cargarListaCompra();
-};
+window.borrarArticulo = async function(id) { await deleteDoc(doc(db, "grupos", idPisoActual, "compra", id)); cargarListaCompra(); };
 
 document.getElementById('btnComprarSeleccionados').addEventListener('click', async () => {
     const seleccionados = Array.from(document.querySelectorAll('.cb-articulo:checked'));
-    if (seleccionados.length === 0) return alert("Selecciona al menos un producto.");
+    if (seleccionados.length === 0) { await window.mostrarAlerta("Atención", "Selecciona al menos un producto."); return; }
     
-    const precioStr = prompt("Introduce el precio total de estos productos:");
-    if (!precioStr) return;
+    const precioStr = await window.mostrarPrompt("Precio de la compra", "Introduce lo que te ha costado en total:");
+    if (precioStr === null) return; // Se canceló
+    
     const precio = parseFloat(precioStr);
-    if (isNaN(precio) || precio <= 0) return alert("Precio inválido");
+    if (isNaN(precio) || precio <= 0) { await window.mostrarAlerta("Error", "El precio introducido no es válido."); return; }
     
     const nombresArticulos = seleccionados.map(cb => cb.getAttribute('data-nombre')).join(', ');
     const concepto = nombresArticulos.length > 40 ? nombresArticulos.substring(0, 37) + '...' : nombresArticulos;
     
     try {
-        // 1. Crear gasto en la pestaña gastos
         await addDoc(collection(db, "grupos", idPisoActual, "gastos"), {
-            concepto: "🛒 Compra: " + concepto,
-            importe: precio,
-            pagador: nombreUsuario, // El que pulsa el botón es el que paga
-            involucrados: participantesGrupo, // A partes iguales por defecto
-            fecha: new Date().toISOString()
+            concepto: "🛒 Compra: " + concepto, importe: precio, pagador: nombreUsuario,
+            involucrados: participantesGrupo, fecha: new Date().toISOString()
         });
+        for (let cb of seleccionados) { await deleteDoc(doc(db, "grupos", idPisoActual, "compra", cb.value)); }
         
-        // 2. Borrar artículos de la lista
-        for (let cb of seleccionados) {
-            await deleteDoc(doc(db, "grupos", idPisoActual, "compra", cb.value));
-        }
-        
-        cargarListaCompra();
-        cargarListaGastos();
-        alert("¡Compra registrada en Gastos con éxito!");
-        activarPestaña('tabGastos', 'vistaGastos'); // Te lleva a gastos para que lo veas
-    } catch(e) { alert("Error al procesar compra."); }
+        cargarListaCompra(); cargarListaGastos();
+        await window.mostrarAlerta("¡Hecho!", "La compra se ha convertido en un Gasto.");
+        activarPestaña('tabGastos', 'vistaGastos');
+    } catch(e) { await window.mostrarAlerta("Error", "Fallo al procesar."); }
 });
-
 
 // --- MÓDULO LIMPIEZA & CALENDARIO ---
 function resetFormZona() {
@@ -512,8 +536,10 @@ window.abrirEditarZona = function(idZona) {
 };
 
 document.getElementById('btnEliminarZona').addEventListener('click', async () => {
-    if (!confirm("¿Eliminar zona?")) return;
-    try { await deleteDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZonaEditando)); document.getElementById('btnCancelarZona').click(); await cargarListaLimpieza(); } catch (e) { alert("Error"); }
+    const seguro = await window.mostrarConfirmacion("Eliminar Zona", "¿Borrar esta zona de limpieza definitivamente?");
+    if (!seguro) return;
+    try { await deleteDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZonaEditando)); document.getElementById('btnCancelarZona').click(); await cargarListaLimpieza(); } 
+    catch (e) { await window.mostrarAlerta("Error", "No se pudo borrar."); }
 });
 
 function obtenerLunes(fecha) {
@@ -524,13 +550,13 @@ function obtenerLunes(fecha) {
 document.getElementById('btnGuardarZona').addEventListener('click', async () => {
     const nombreZona = document.getElementById('nombreZona').value; const btn = document.getElementById('btnGuardarZona');
     const cbs = document.querySelectorAll('#responsablesZona input[type="checkbox"]:checked'); const resp = Array.from(cbs).map(cb => cb.value);
-    if (!nombreZona || resp.length === 0) return alert("Faltan datos.");
+    if (!nombreZona || resp.length === 0) { await window.mostrarAlerta("Faltan datos", "Indica el nombre y quién limpia."); return; }
     btn.disabled = true; const datos = { nombre_zona: nombreZona, responsables: resp };
     try {
         if (idZonaEditando) await updateDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZonaEditando), datos);
         else { datos.fecha_base = new Date(obtenerLunes(new Date())).toISOString(); await addDoc(collection(db, "grupos", idPisoActual, "zonas_limpieza"), datos); }
         document.getElementById('btnCancelarZona').click(); await cargarListaLimpieza();
-    } catch (e) { alert("Error"); } finally { btn.disabled = false; }
+    } catch (e) { await window.mostrarAlerta("Error", "Fallo al guardar."); } finally { btn.disabled = false; }
 });
 
 async function cargarListaLimpieza() {
