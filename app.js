@@ -1,5 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, collection, addDoc, getDocs, query, orderBy, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, collection, addDoc, getDocs, query, orderBy, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+// NUEVO: Importamos el motor de notificaciones Push
+import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-messaging.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCGWAqi1MKJrlLNiCOIEztMu5qrNGbGtMA",
@@ -12,6 +14,24 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const messaging = getMessaging(app); // Inicializamos Mensajería
+
+// Función para pedir permiso y guardar el dispositivo para las Push
+async function activarNotificacionesPush() {
+    try {
+        const permiso = await Notification.requestPermission();
+        if (permiso === 'granted') {
+            const token = await getToken(messaging, { vapidKey: "BMwN91jpJDw5pzlQB2syEMaK0ooR7893Dv880j2LRKM4ENlZES0cSLjot2M08vIq7qxGC9ZwIud8uySMBGXcZfs" });
+            if (token) {
+                // Guardamos el token en Firestore bajo el nombre del usuario
+                await setDoc(doc(db, "grupos", idPisoActual, "tokens_push", nombreUsuario), {
+                    token: token,
+                    actualizado: new Date().toISOString()
+                });
+            }
+        }
+    } catch (error) { console.log("Notificaciones bloqueadas o no soportadas en este navegador."); }
+}
 
 let participantesGrupo = []; 
 let idPisoActual = "";
@@ -26,7 +46,11 @@ let fechaCalendario = new Date();
 let misPisos = JSON.parse(localStorage.getItem('misPisos_v2')) || [];
 let ultimoPisoActivo = localStorage.getItem('ultimoPisoActivo');
 
-// Variables Globales para Ranking
+// NUEVO: Controladores para cerrar conexiones en tiempo real
+let unsubGastos = null;
+let unsubCompra = null;
+let unsubLimpieza = null;
+
 let ultimosGastos = [];
 let ultimosBalances = {};
 let ultimosStrikes = {};
@@ -151,23 +175,26 @@ async function mostrarDashboard(nombre, id) {
         participantesGrupo = datos.participantes;
         
         cargarTablon(datos.tablon || { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" });
-        await cargarListaGastos();
-        await cargarListaLimpieza();
+        
+        // Arrancamos los Listeners en TIEMPO REAL
+        cargarListaGastos();
+        cargarListaLimpieza();
         cargarListaCompra();
+        
+        // Pedir permiso notificaciones Push
+        activarNotificacionesPush();
     }
 }
 
-// CAMBIAR DE USUARIO
 document.getElementById('btnCambiarUsuario').addEventListener('click', async () => {
     const seguro = await window.mostrarConfirmacion("Cambiar de perfil", "¿Te has equivocado de nombre? Volverás a la pantalla de selección.");
     if (seguro) {
+        if(unsubGastos) unsubGastos(); if(unsubCompra) unsubCompra(); if(unsubLimpieza) unsubLimpieza();
         misPisos = misPisos.filter(p => p.id !== idPisoActual);
         localStorage.setItem('misPisos_v2', JSON.stringify(misPisos));
         localStorage.removeItem('ultimoPisoActivo');
-        document.getElementById('pantallaDashboard').classList.add('hidden');
-        document.body.classList.add('pantalla-centrada');
-        document.getElementById('pantallaUnirse').classList.remove('hidden');
-        await cargarPantallaUnirse(idPisoActual);
+        document.getElementById('pantallaDashboard').classList.add('hidden'); document.body.classList.add('pantalla-centrada');
+        document.getElementById('pantallaUnirse').classList.remove('hidden'); await cargarPantallaUnirse(idPisoActual);
     }
 });
 
@@ -188,7 +215,6 @@ document.getElementById('btnCopiarEnlace').addEventListener('click', async () =>
     catch (e) { await window.mostrarAlerta("Error al copiar", "Cópialo manualmente: \n\n" + enlace); }
 });
 
-// PESTAÑAS Y TABLÓN
 function activarPestaña(idTab, idVista) {
     ['tabGastos', 'tabCompra', 'tabLimpieza', 'tabRanking'].forEach(t => document.getElementById(t).classList.remove('active'));
     ['vistaGastos', 'vistaCompra', 'vistaLimpieza', 'vistaRanking'].forEach(v => document.getElementById(v).classList.add('hidden'));
@@ -199,13 +225,8 @@ document.getElementById('tabCompra').addEventListener('click', () => activarPest
 document.getElementById('tabLimpieza').addEventListener('click', () => activarPestaña('tabLimpieza', 'vistaLimpieza'));
 document.getElementById('tabRanking').addEventListener('click', () => activarPestaña('tabRanking', 'vistaRanking'));
 
-document.getElementById('btnAbrirTablon').addEventListener('click', () => {
-    window.scrollTo(0, 0); document.body.style.overflow = 'hidden'; 
-    document.getElementById('vistaTablon').classList.remove('hidden');
-});
-document.getElementById('btnCerrarTablon').addEventListener('click', () => {
-    document.body.style.overflow = 'auto'; document.getElementById('vistaTablon').classList.add('hidden');
-});
+document.getElementById('btnAbrirTablon').addEventListener('click', () => { window.scrollTo(0, 0); document.body.style.overflow = 'hidden'; document.getElementById('vistaTablon').classList.remove('hidden'); });
+document.getElementById('btnCerrarTablon').addEventListener('click', () => { document.body.style.overflow = 'auto'; document.getElementById('vistaTablon').classList.add('hidden'); });
 
 // --- MÓDULO GASTOS ---
 function resetFormGasto() {
@@ -222,16 +243,8 @@ document.getElementById('tipoDivisionGasto').addEventListener('change', preparar
 function prepararFormularioGastos(gastoObj = null) {
     const selectPagador = document.getElementById('pagadorGasto'); const divInvolucrados = document.getElementById('involucradosGasto');
     const tipoDiv = document.getElementById('tipoDivisionGasto').value; const infoManual = document.getElementById('infoDivisionManual');
-    
-    if(!gastoObj) {
-        selectPagador.innerHTML = '';
-        participantesGrupo.forEach(p => {
-            const opt = document.createElement('option'); opt.value = p; opt.innerText = p;
-            if (p === nombreUsuario) opt.selected = true; selectPagador.appendChild(opt);
-        });
-    }
+    if(!gastoObj) { selectPagador.innerHTML = ''; participantesGrupo.forEach(p => { const opt = document.createElement('option'); opt.value = p; opt.innerText = p; if (p === nombreUsuario) opt.selected = true; selectPagador.appendChild(opt); }); }
     divInvolucrados.innerHTML = '';
-    
     if (tipoDiv === 'iguales') {
         infoManual.classList.add('hidden');
         participantesGrupo.forEach(p => {
@@ -243,9 +256,7 @@ function prepararFormularioGastos(gastoObj = null) {
         infoManual.classList.remove('hidden');
         participantesGrupo.forEach(p => {
             let val = '';
-            if (gastoObj && Array.isArray(gastoObj.involucrados) && typeof gastoObj.involucrados[0] === 'object') {
-                const found = gastoObj.involucrados.find(i => i.nombre === p); if (found) val = found.importe;
-            }
+            if (gastoObj && Array.isArray(gastoObj.involucrados) && typeof gastoObj.involucrados[0] === 'object') { const found = gastoObj.involucrados.find(i => i.nombre === p); if (found) val = found.importe; }
             divInvolucrados.innerHTML += `<div class="manual-split-row"><span>${p}</span><input type="number" class="manual-importe" data-nombre="${p}" step="0.01" min="0" placeholder="0.00" value="${val}"></div>`;
         });
         document.querySelectorAll('.manual-importe').forEach(inp => inp.addEventListener('input', calcularFaltanteManual));
@@ -267,7 +278,6 @@ window.abrirEditarGasto = function(gastoObj) {
     idGastoEditando = gastoObj.id; document.getElementById('tituloFormGasto').innerText = 'Editar Gasto';
     document.getElementById('conceptoGasto').value = gastoObj.concepto; document.getElementById('importeGasto').value = gastoObj.importe;
     if (gastoObj.involucrados.length > 0 && typeof gastoObj.involucrados[0] === 'object') { document.getElementById('tipoDivisionGasto').value = 'manual'; } else { document.getElementById('tipoDivisionGasto').value = 'iguales'; }
-    
     prepararFormularioGastos(gastoObj); document.getElementById('pagadorGasto').value = gastoObj.pagador;
     document.getElementById('btnGuardarGasto').innerText = 'Actualizar'; document.getElementById('btnEliminarGasto').classList.remove('hidden');
     document.getElementById('formGasto').classList.remove('hidden'); document.getElementById('btnMostrarFormGasto').classList.add('hidden');
@@ -278,7 +288,7 @@ document.getElementById('btnEliminarGasto').addEventListener('click', async () =
     const seguro = await window.mostrarConfirmacion("Eliminar Gasto", "¿Seguro que quieres eliminar este gasto? Afectará a las cuentas.");
     if (!seguro) return;
     const boton = document.getElementById('btnEliminarGasto'); boton.disabled = true;
-    try { await deleteDoc(doc(db, "grupos", idPisoActual, "gastos", idGastoEditando)); document.getElementById('btnCancelarGasto').click(); await cargarListaGastos(); } 
+    try { await deleteDoc(doc(db, "grupos", idPisoActual, "gastos", idGastoEditando)); document.getElementById('btnCancelarGasto').click(); } 
     catch (error) { await window.mostrarAlerta("Error", "No se pudo eliminar."); } finally { boton.disabled = false; }
 });
 
@@ -287,7 +297,6 @@ document.getElementById('btnGuardarGasto').addEventListener('click', async () =>
     const pagador = document.getElementById('pagadorGasto').value; const tipo = document.getElementById('tipoDivisionGasto').value;
     if (!concepto || isNaN(importe)) return await window.mostrarAlerta("Datos incompletos", "Rellena el concepto y el importe.");
     let involucradosData = [];
-    
     if (tipo === 'iguales') {
         const cbs = document.querySelectorAll('.gasto-cb:checked');
         if(cbs.length === 0) return await window.mostrarAlerta("Aviso", "Selecciona al menos a una persona para dividir.");
@@ -307,21 +316,22 @@ document.getElementById('btnGuardarGasto').addEventListener('click', async () =>
             inputsVacios.forEach(nombre => { involucradosData.push({ nombre: nombre, importe: aCadaVacio }); });
         }
     }
-    
     const boton = document.getElementById('btnGuardarGasto'); boton.innerText = "Guardando..."; boton.disabled = true;
     const datosGasto = { concepto: concepto, importe: importe, pagador: pagador, involucrados: involucradosData };
     try {
         if (idGastoEditando) await updateDoc(doc(db, "grupos", idPisoActual, "gastos", idGastoEditando), datosGasto);
         else { datosGasto.fecha = new Date().toISOString(); await addDoc(collection(db, "grupos", idPisoActual, "gastos"), datosGasto); }
-        document.getElementById('btnCancelarGasto').click(); await cargarListaGastos();
+        document.getElementById('btnCancelarGasto').click(); 
     } catch (error) { await window.mostrarAlerta("Error", "Fallo al guardar."); } finally { boton.disabled = false; }
 });
 
-async function cargarListaGastos() {
+function cargarListaGastos() {
+    if (unsubGastos) unsubGastos();
+    const q = query(collection(db, "grupos", idPisoActual, "gastos"), orderBy("fecha", "desc"));
     const listaHtml = document.getElementById('listaGastos');
-    try {
-        const q = query(collection(db, "grupos", idPisoActual, "gastos"), orderBy("fecha", "desc"));
-        const querySnapshot = await getDocs(q);
+    
+    // TIEMPO REAL: onSnapshot
+    unsubGastos = onSnapshot(q, (querySnapshot) => {
         ultimosGastos = [];
         if (querySnapshot.empty) {
             listaHtml.innerHTML = '<p style="color:#86868b;">No hay gastos.</p>';
@@ -334,11 +344,11 @@ async function cargarListaGastos() {
             const gasto = docSnap.data(); gasto.id = docSnap.id; ultimosGastos.push(gasto); 
             const divGasto = document.createElement('div'); divGasto.className = 'item-lista';
             const extraDetalle = typeof gasto.involucrados[0] === 'object' ? ' (Manual)' : '';
-            divGasto.innerHTML = `<div class="item-info"><span class="item-titulo">${gasto.concepto}</span><span class="item-detalle">${gasto.pagador} pagó para ${gasto.involucrados.length}${extraDetalle} • ${new Date(gasto.fecha).toLocaleDateString()}</span></div><div style="display: flex; align-items: center; gap: 12px;"><span class="gasto-importe">${gasto.importe.toFixed(2)}€</span><button style="background:none; border:none; padding:0; cursor:pointer; font-size:1.4em;" onclick='window.abrirEditarGasto(${JSON.stringify(gasto).replace(/'/g, "\\'")})'>✏️</button></div>`;
+            divGasto.innerHTML = `<div class="item-info"><span class="item-titulo">${gasto.concepto}</span><span class="item-detalle">${gasto.pagador} pagó para ${gasto.involucrados.length}${extraDetalle} • ${new Date(gasto.fecha).toLocaleDateString()}</span></div><div style="display: flex; align-items: center; gap: 12px;"><span class="gasto-importe">${gasto.importe.toFixed(2)}€</span><button type="button" style="background:none; border:none; padding:0; cursor:pointer; font-size:1.4em;" onclick='window.abrirEditarGasto(${JSON.stringify(gasto).replace(/'/g, "\\'")})'>✏️</button></div>`;
             listaHtml.appendChild(divGasto);
         });
         calcularBalancesYDeudas(ultimosGastos);
-    } catch (error) { listaHtml.innerHTML = 'Error al cargar.'; }
+    });
 }
 
 function calcularBalancesYDeudas(gastos) {
@@ -383,7 +393,6 @@ window.registrarBizum = async function(deudor, acreedor, cantidad) {
             concepto: `💸 Bizum de ${deudor}`, importe: parseFloat(cantidad), pagador: deudor,
             involucrados: [{ nombre: acreedor, importe: parseFloat(cantidad) }], fecha: new Date().toISOString()
         });
-        await cargarListaGastos();
     } catch(e) { await window.mostrarAlerta("Error", "No se pudo registrar el pago."); }
 };
 
@@ -392,20 +401,24 @@ document.getElementById('btnAñadirArticulo').addEventListener('click', async ()
     const input = document.getElementById('inputNuevoArticulo'); const articulo = input.value.trim();
     if (!articulo) return; input.value = '';
     await addDoc(collection(db, "grupos", idPisoActual, "compra"), { articulo: articulo, añadidoPor: nombreUsuario, fecha: new Date().toISOString() });
-    cargarListaCompra(); 
 });
 
-async function cargarListaCompra() {
+function cargarListaCompra() {
+    if (unsubCompra) unsubCompra();
+    const q = query(collection(db, "grupos", idPisoActual, "compra"), orderBy("fecha", "asc"));
     const listaHtml = document.getElementById('listaArticulos');
-    const q = query(collection(db, "grupos", idPisoActual, "compra"), orderBy("fecha", "asc")); const querySnapshot = await getDocs(q);
-    if (querySnapshot.empty) { listaHtml.innerHTML = '<p style="color:#86868b; text-align:center;">Lista vacía.</p>'; document.getElementById('btnComprarSeleccionados').disabled = true; return; }
-    document.getElementById('btnComprarSeleccionados').disabled = false; listaHtml.innerHTML = '';
-    querySnapshot.forEach(docSnap => {
-        const item = docSnap.data();
-        listaHtml.innerHTML += `<div class="manual-split-row" style="margin-bottom: 8px;"><label style="flex:1; display:flex; align-items:center; gap:10px; cursor:pointer;"><input type="checkbox" class="cb-articulo" value="${docSnap.id}" data-nombre="${item.articulo}"><span>${item.articulo} <small style="color:#86868b; display:block; font-size:0.8em;">Por ${item.añadidoPor}</small></span></label><button onclick="borrarArticulo('${docSnap.id}')" style="background:none; width:auto; margin:0; padding:5px; color:#ff453a; font-size:1.2em;">🗑️</button></div>`;
+    
+    // TIEMPO REAL: onSnapshot
+    unsubCompra = onSnapshot(q, (querySnapshot) => {
+        if (querySnapshot.empty) { listaHtml.innerHTML = '<p style="color:#86868b; text-align:center;">Lista vacía.</p>'; document.getElementById('btnComprarSeleccionados').disabled = true; return; }
+        document.getElementById('btnComprarSeleccionados').disabled = false; listaHtml.innerHTML = '';
+        querySnapshot.forEach(docSnap => {
+            const item = docSnap.data();
+            listaHtml.innerHTML += `<div class="manual-split-row" style="margin-bottom: 8px;"><label style="flex:1; display:flex; align-items:center; gap:10px; cursor:pointer;"><input type="checkbox" class="cb-articulo" value="${docSnap.id}" data-nombre="${item.articulo}"><span>${item.articulo} <small style="color:#86868b; display:block; font-size:0.8em;">Por ${item.añadidoPor}</small></span></label><button type="button" onclick="borrarArticulo('${docSnap.id}')" style="background:none; width:auto; margin:0; padding:5px; color:#ff453a; font-size:1.2em;">🗑️</button></div>`;
+        });
     });
 }
-window.borrarArticulo = async function(id) { await deleteDoc(doc(db, "grupos", idPisoActual, "compra", id)); cargarListaCompra(); };
+window.borrarArticulo = async function(id) { await deleteDoc(doc(db, "grupos", idPisoActual, "compra", id)); };
 
 document.getElementById('btnComprarSeleccionados').addEventListener('click', async () => {
     const seleccionados = Array.from(document.querySelectorAll('.cb-articulo:checked'));
@@ -419,7 +432,7 @@ document.getElementById('btnComprarSeleccionados').addEventListener('click', asy
     try {
         await addDoc(collection(db, "grupos", idPisoActual, "gastos"), { concepto: "🛒 Compra: " + concepto, importe: precio, pagador: nombreUsuario, involucrados: participantesGrupo, fecha: new Date().toISOString() });
         for (let cb of seleccionados) { await deleteDoc(doc(db, "grupos", idPisoActual, "compra", cb.value)); }
-        cargarListaCompra(); cargarListaGastos(); await window.mostrarAlerta("¡Hecho!", "La compra se ha convertido en un Gasto."); activarPestaña('tabGastos', 'vistaGastos');
+        await window.mostrarAlerta("¡Hecho!", "La compra se ha convertido en un Gasto."); activarPestaña('tabGastos', 'vistaGastos');
     } catch(e) { await window.mostrarAlerta("Error", "Fallo al procesar."); }
 });
 
@@ -437,7 +450,7 @@ document.getElementById('btnCancelarZona').addEventListener('click', () => { doc
 
 window.abrirEditarZona = function(idZona) {
     const zonaObj = zonasLimpiezaCache.find(z => z.id === idZona); if(!zonaObj) return;
-    resetFormZona(); idZonaEditando = zonaObj.id; // ORDEN CORREGIDO PARA QUE FUNCIONE ELIMINAR
+    resetFormZona(); idZonaEditando = zonaObj.id; 
     document.getElementById('tituloFormZona').innerText = 'Editar Zona'; document.getElementById('nombreZona').value = zonaObj.nombre_zona;
     document.getElementById('frecuenciaZona').value = zonaObj.frecuencia || 1;
     document.querySelectorAll('#responsablesZona input[type="checkbox"]').forEach(cb => { cb.checked = zonaObj.responsables.includes(cb.value); });
@@ -449,7 +462,7 @@ window.abrirEditarZona = function(idZona) {
 document.getElementById('btnEliminarZona').addEventListener('click', async () => {
     const seguro = await window.mostrarConfirmacion("Eliminar Zona", "¿Borrar esta zona de limpieza definitivamente?");
     if (!seguro) return;
-    try { await deleteDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZonaEditando)); document.getElementById('btnCancelarZona').click(); await cargarListaLimpieza(); } catch (e) { await window.mostrarAlerta("Error", "No se pudo borrar."); }
+    try { await deleteDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZonaEditando)); document.getElementById('btnCancelarZona').click(); } catch (e) { await window.mostrarAlerta("Error", "No se pudo borrar."); }
 });
 
 function obtenerLunes(fecha) { let d = new Date(fecha); let day = d.getDay(); let diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(d.setDate(diff)).setHours(0,0,0,0); }
@@ -463,20 +476,21 @@ document.getElementById('btnGuardarZona').addEventListener('click', async () => 
     try {
         if (idZonaEditando) await updateDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZonaEditando), datos);
         else { datos.fecha_base = new Date(obtenerLunes(new Date())).toISOString(); await addDoc(collection(db, "grupos", idPisoActual, "zonas_limpieza"), datos); }
-        document.getElementById('btnCancelarZona').click(); await cargarListaLimpieza();
+        document.getElementById('btnCancelarZona').click();
     } catch (e) { await window.mostrarAlerta("Error", "Fallo al guardar."); } finally { btn.disabled = false; }
 });
 
 window.marcarLimpieza = async function(idZona, timestamp) {
-    try {
-        await updateDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZona), { [`semanas_hechas.${timestamp}`]: nombreUsuario });
-        await cargarListaLimpieza();
-    } catch (e) { await window.mostrarAlerta("Error", "No se pudo confirmar."); }
+    try { await updateDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZona), { [`semanas_hechas.${timestamp}`]: nombreUsuario }); } 
+    catch (e) { await window.mostrarAlerta("Error", "No se pudo confirmar."); }
 };
 
-async function cargarListaLimpieza() {
-    try {
-        const q = query(collection(db, "grupos", idPisoActual, "zonas_limpieza")); const snap = await getDocs(q);
+function cargarListaLimpieza() {
+    if (unsubLimpieza) unsubLimpieza();
+    const q = query(collection(db, "grupos", idPisoActual, "zonas_limpieza"));
+    
+    // TIEMPO REAL: onSnapshot
+    unsubLimpieza = onSnapshot(q, (snap) => {
         zonasLimpiezaCache = [];
         if (!snap.empty) { snap.forEach(d => { const z = d.data(); z.id = d.id; zonasLimpiezaCache.push(z); }); zonasLimpiezaCache.sort((a, b) => a.nombre_zona.localeCompare(b.nombre_zona)); }
         
@@ -499,12 +513,12 @@ async function cargarListaLimpieza() {
             let hoyStr = new Date().toISOString().split('T')[0];
             if (localStorage.getItem('alerta_strikes_dia') !== hoyStr) {
                 localStorage.setItem('alerta_strikes_dia', hoyStr);
-                setTimeout(() => { window.mostrarAlerta("⚠️ ALERTA DE INSALUBRIDAD", "Los siguientes inquilinos llevan 3 o más tareas de limpieza sin hacer y deben una ronda al piso por ley:\n\n" + morososLimpieza.join("\n")); }, 1000);
+                setTimeout(() => { window.mostrarAlerta("⚠️ ALERTA DE INSALUBRIDAD", "Los siguientes inquilinos llevan 3 o más tareas de limpieza sin hacer y deben una ronda al piso:\n\n" + morososLimpieza.join("\n")); }, 1000);
             }
         }
 
         renderVistaSemanaActual(); renderCalendarioMensual(); generarRankingGlobal();
-    } catch (e) { console.error(e); }
+    });
 }
 
 function calcularAsignacionesParaSemana(fechaLunes) {
@@ -631,7 +645,7 @@ document.getElementById('btnCopiarWifi').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(pass); await window.mostrarAlerta("Copiado", "Contraseña copiada al portapapeles."); } catch (e) { await window.mostrarAlerta("Contraseña", pass); }
 });
 
-// --- MÓDULO RANKING: TÍTULOS ÚNICOS DINÁMICOS ---
+// --- MÓDULO RANKING ---
 function generarRankingGlobal() {
     if (participantesGrupo.length === 0) return;
     const cont = document.getElementById('contenidoRanking');
@@ -695,7 +709,6 @@ function generarRankingGlobal() {
     cont.innerHTML = html;
 }
 
-document.getElementById('btnVolverMenu').addEventListener('click', () => { localStorage.removeItem('ultimoPisoActivo'); window.location.href = window.location.pathname; });
 if ('serviceWorker' in navigator) window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(()=>{}); });
 
 iniciarApp();
