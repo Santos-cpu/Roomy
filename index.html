@@ -5,24 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>App Piso Estudiantes</title>
     
-    <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#000000">
     <link rel="apple-touch-icon" href="icon-192.png">
 
     <style>
-        /* Estilo iOS Dark Mode */
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
             padding: 20px; max-width: 400px; margin: 0 auto; 
-            background-color: #000000; color: #f5f5f7;
-            color-scheme: dark; 
+            background-color: #000000; color: #f5f5f7; color-scheme: dark; 
         }
         
         .pantalla-centrada { display: flex; flex-direction: column; justify-content: center; min-height: 90vh; }
         .card { background: #1c1c1e; padding: 20px; border-radius: 16px; margin-bottom: 20px; }
         
-        /* Inputs */
         input, select { 
             width: 100%; margin-bottom: 15px; padding: 14px; 
             background-color: #2c2c2e; color: #f5f5f7;
@@ -31,52 +27,48 @@
         }
         input:focus, select:focus { border-color: #0a84ff; }
         
-        /* Botones principales */
         button { 
             background-color: #0a84ff; color: #ffffff; border: none; font-weight: 600; 
             cursor: pointer; padding: 14px; width: 100%; border-radius: 12px; margin-bottom: 15px; font-size: 16px;
         }
         button:active { opacity: 0.8; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
         
-        /* NUEVO: Botón destacado para Mis Pisos (Verde iOS) */
         .btn-piso {
-            background: linear-gradient(135deg, #32d74b, #28a745);
-            color: #000000; font-weight: 700; font-size: 1.15em;
-            border: none; border-radius: 14px; padding: 16px;
-            width: 100%; margin-bottom: 14px; cursor: pointer;
-            box-shadow: 0 4px 12px rgba(50, 215, 75, 0.25);
-            transition: transform 0.2s;
+            background: linear-gradient(135deg, #32d74b, #28a745); color: #000000; font-weight: 700; font-size: 1.15em;
+            border: none; border-radius: 14px; padding: 16px; width: 100%; margin-bottom: 14px; cursor: pointer;
+            box-shadow: 0 4px 12px rgba(50, 215, 75, 0.25); transition: transform 0.2s;
         }
         .btn-piso:active { transform: scale(0.96); }
         
-        /* Botones secundarios */
         .btn-name { background-color: #2c2c2e; color: #f5f5f7; margin-bottom: 10px; font-size: 1.1em; border: 1px solid #3a3a3c; }
         .btn-secundario { background-color: #3a3a3c; color: #f5f5f7; }
         .btn-outline { background-color: transparent; border: 1px solid #0a84ff; color: #0a84ff; }
+        .btn-bizum { background-color: #32d74b; color: #000; width: auto; padding: 8px 12px; margin: 0; font-size: 0.9em; border-radius: 8px; }
+        
         .hidden { display: none !important; }
         
-        /* Pestañas (Segmented Control iOS) */
         .tabs { display: flex; background: #2c2c2e; padding: 3px; border-radius: 9px; margin-bottom: 20px; }
         .tab { flex: 1; padding: 8px; text-align: center; cursor: pointer; color: #86868b; font-weight: 600; font-size: 0.9em; border-radius: 7px; transition: 0.2s; }
-        .tab.active { background: #1c1c1e; color: #f5f5f7; box-shadow: 0 3px 8px rgba(0,0,0,0.12), 0 3px 1px rgba(0,0,0,0.04); }
+        .tab.active { background: #1c1c1e; color: #f5f5f7; box-shadow: 0 3px 8px rgba(0,0,0,0.12); }
         
-        /* Listas y elementos */
         .item-lista { border-bottom: 1px solid #2c2c2e; padding: 14px 0; display: flex; justify-content: space-between; align-items: center; }
         .item-info { display: flex; flex-direction: column; flex: 1; padding-right: 10px; }
         .item-titulo { font-weight: 600; font-size: 1.05em; word-break: break-word; color: #f5f5f7; }
         .item-detalle { font-size: 0.85em; color: #86868b; margin-top: 4px; line-height: 1.3; }
-        .gasto-importe { font-weight: bold; color: #f5f5f7; font-size: 1.1em; }
         
         .checkbox-group { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
         .checkbox-group label { display: flex; align-items: center; gap: 10px; font-weight: normal; font-size: 1.05em;}
-        .checkbox-group input { width: 20px; height: 20px; margin: 0; accent-color: #0a84ff; }
+        .checkbox-group input[type="checkbox"] { width: 20px; height: 20px; margin: 0; accent-color: #0a84ff; }
+        
+        .manual-split-row { display: flex; justify-content: space-between; align-items: center; background: #1c1c1e; padding: 8px 12px; border-radius: 8px; border: 1px solid #3a3a3c; }
+        .manual-split-row input { width: 80px; margin: 0; padding: 8px; text-align: right; }
         
         .balance-item { display: flex; justify-content: space-between; border-bottom: 1px solid #2c2c2e; padding: 12px 0; font-size: 1.05em; }
-        .deuda-item { background: #2c2c2e; padding: 12px; border-radius: 10px; margin-bottom: 8px; font-size: 0.95em; color: #e5e5ea; }
+        .deuda-item { display: flex; justify-content: space-between; align-items: center; background: #2c2c2e; padding: 12px; border-radius: 10px; margin-bottom: 8px; font-size: 0.95em; color: #e5e5ea; }
         
         .mi-turno { background-color: rgba(50, 215, 75, 0.15); padding: 10px; border-radius: 10px; border-left: 4px solid #32d74b; margin-bottom: 5px; border-bottom: none; }
         .tag-nombre { display: flex; justify-content: space-between; align-items: center; background: #2c2c2e; padding: 10px 14px; border-radius: 10px; margin-bottom: 10px; font-weight: 600; border: 1px solid #3a3a3c; }
-        .tag-eliminar { color: #ff453a; cursor: pointer; font-weight: bold; padding: 0 5px; font-size: 1.2em; }
         
         hr { border: 0; border-top: 1px solid #3a3a3c; margin: 20px 0; }
         h2, h3, h4, h5 { margin-top: 0; }
@@ -84,61 +76,49 @@
 </head>
 <body>
 
-    <!-- MENÚ TUS PISOS -->
     <div id="pantallaMisPisos" class="card hidden">
         <h2 style="text-align: center;">🏠 Tus Pisos</h2>
-        <p style="text-align: center; color: #86868b; font-size: 0.9em;">Selecciona el grupo al que quieres entrar</p>
         <div id="listaMisPisos" style="margin-top: 25px;"></div>
         <button id="btnIrCrearPiso" class="btn-outline" style="margin-top: 15px; background: #1c1c1e;">+ Crear un piso nuevo</button>
     </div>
 
-    <!-- CREAR PISO -->
     <div id="pantallaCrear" class="card hidden">
         <h2 style="text-align: center;">✨ Nuevo Piso</h2>
-        <label style="color: #86868b; font-size: 0.9em; margin-bottom: 5px; display: block;">Nombre del piso:</label>
-        <input type="text" id="nombrePiso" placeholder="Ej. Piso Ciudad Real">
-        
-        <label style="color: #86868b; font-size: 0.9em; margin-bottom: 5px; display: block;">Añadir inquilinos:</label>
+        <input type="text" id="nombrePiso" placeholder="Nombre del piso">
         <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-            <input type="text" id="inputNuevoNombre" placeholder="Nombre" style="margin-bottom: 0;">
+            <input type="text" id="inputNuevoNombre" placeholder="Añadir inquilino" style="margin-bottom: 0;">
             <button id="btnAñadirNombre" type="button" style="width: 60px; margin-bottom: 0; font-size: 1.4em; background: #2c2c2e; color: #0a84ff; border: 1px solid #3a3a3c;">+</button>
         </div>
         <div id="contenedorNuevosNombres" style="margin-bottom: 25px;"></div>
-        
         <button id="btnCrear">Crear Piso</button>
-        <button id="btnCancelarCrear" class="btn-secundario hidden">Volver a mis pisos</button>
+        <button id="btnCancelarCrear" class="btn-secundario hidden">Volver</button>
     </div>
 
-    <!-- UNIRSE A PISO -->
     <div id="pantallaUnirse" class="card hidden">
-        <h2 id="tituloUnirse" style="text-align: center;">Cargando piso...</h2>
-        <p style="text-align: center; color: #86868b;">Selecciona tu nombre para entrar:</p>
+        <h2 id="tituloUnirse" style="text-align: center;">Cargando...</h2>
+        <p style="text-align: center; color: #86868b;">Selecciona tu nombre:</p>
         <div id="listaNombres" style="margin-top: 20px;"></div>
     </div>
 
-    <!-- DASHBOARD -->
     <div id="pantallaDashboard" class="hidden">
         <div class="card" style="padding-bottom: 10px;">
-            
-            <!-- HEADER MODIFICADO: Nombre truncado, botón editar y botón copiar -->
             <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
                 <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
                     <h3 id="tituloDashboard" style="margin: 0; font-size: 1.3em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px;">Piso</h3>
-                    <button id="btnEditarNombrePiso" style="background: none; border: none; padding: 0; margin: 0; width: auto; font-size: 1.2em; cursor: pointer;">✏️</button>
+                    <button id="btnEditarNombrePiso" style="background: none; border: none; padding: 0; width: auto; font-size: 1.2em;">✏️</button>
                 </div>
-                
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <button id="btnCopiarEnlace" style="background: none; color: #0a84ff; padding: 6px 8px; border-radius: 8px; font-size: 0.85em; margin: 0; width: auto; font-weight: 600; border: 1px solid #3a3a3c;">Copiar</button>
-                    <span id="nombreUsuarioActual" style="background: #2c2c2e; color: #f5f5f7; border: 1px solid #3a3a3c; padding: 6px 12px; border-radius: 12px; font-size: 0.85em; font-weight: 600;"></span>
+                    <span id="nombreUsuarioActual" style="background: #2c2c2e; border: 1px solid #3a3a3c; padding: 6px 12px; border-radius: 12px; font-size: 0.85em; font-weight: 600;"></span>
                 </div>
             </div>
-            
-            <button id="btnVolverMenu" style="background: none; color: #86868b; font-size: 0.9em; text-align: left; padding: 0; margin-top: 18px; width: auto; font-weight: 500;">← Volver al menú de pisos</button>
+            <button id="btnVolverMenu" style="background: none; color: #86868b; font-size: 0.9em; text-align: left; padding: 0; margin-top: 18px; width: auto; font-weight: 500;">← Cambiar de piso</button>
         </div>
 
         <div class="tabs">
             <div class="tab active" id="tabGastos">💸 Gastos</div>
-            <div class="tab" id="tabLimpieza">🧹 Limpieza</div>
+            <div class="tab" id="tabCompra">🛒 Compra</div>
+            <div class="tab" id="tabLimpieza">🧹 Tareas</div>
         </div>
 
         <!-- VISTA: GASTOS -->
@@ -146,13 +126,21 @@
             <button id="btnMostrarFormGasto">+ Añadir Gasto</button>
             <div id="formGasto" class="hidden" style="background: #000000; padding: 20px; border-radius: 12px; margin-bottom: 25px; border: 1px solid #2c2c2e;">
                 <h4 id="tituloFormGasto" style="margin-bottom: 20px;">Nuevo Gasto</h4>
-                <label style="color: #86868b; font-size: 0.9em;">Concepto:</label>
-                <input type="text" id="conceptoGasto" placeholder="Ej. Compra Mercadona">
-                <label style="color: #86868b; font-size: 0.9em;">Importe (€):</label>
-                <input type="number" id="importeGasto" placeholder="0.00" step="0.01" min="0">
+                <input type="text" id="conceptoGasto" placeholder="Concepto (Ej. Mercadona)">
+                <input type="number" id="importeGasto" placeholder="Importe total (€)" step="0.01" min="0">
                 <label style="color: #86868b; font-size: 0.9em;">¿Quién ha pagado?</label>
                 <select id="pagadorGasto"></select>
+                
                 <label style="color: #86868b; font-size: 0.9em; display: block; margin-bottom: 10px;">Dividir entre:</label>
+                <select id="tipoDivisionGasto">
+                    <option value="iguales">A partes iguales</option>
+                    <option value="manual">Manualmente</option>
+                </select>
+                
+                <div id="infoDivisionManual" style="color: #0a84ff; font-size: 0.85em; margin-bottom: 10px; font-weight: 600;" class="hidden">
+                    Calculando...
+                </div>
+                
                 <div id="involucradosGasto" class="checkbox-group"></div>
                 
                 <div style="display: flex; gap: 10px; margin-bottom: 15px; margin-top: 10px;">
@@ -163,7 +151,7 @@
             </div>
 
             <div id="seccionBalances" style="margin-bottom: 25px;">
-                <h4>Balances</h4>
+                <h4>Balances y Deudas</h4>
                 <div id="listaBalances">Calculando...</div>
                 <div id="listaDeudas" style="margin-top: 20px;"></div>
             </div>
@@ -174,13 +162,27 @@
             </div>
         </div>
 
+        <!-- VISTA: COMPRA -->
+        <div id="vistaCompra" class="card hidden">
+            <h4 style="margin-bottom: 15px;">Lista de la compra</h4>
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <input type="text" id="inputNuevoArticulo" placeholder="Ej. Leche, Papel higiénico..." style="margin-bottom: 0;">
+                <button id="btnAñadirArticulo" type="button" style="width: 60px; margin-bottom: 0; font-size: 1.4em; background: #2c2c2e; color: #0a84ff; border: 1px solid #3a3a3c;">+</button>
+            </div>
+            
+            <div id="listaArticulos" class="checkbox-group" style="margin-bottom: 20px;">Cargando...</div>
+            
+            <hr>
+            <button id="btnComprarSeleccionados" style="background: linear-gradient(135deg, #0a84ff, #0066cc);">Convertir en Gasto</button>
+            <p style="font-size: 0.8em; color: #86868b; text-align: center; margin-top: -5px;">Selecciona lo que has comprado arriba para pasarlo a la pestaña de Gastos.</p>
+        </div>
+
         <!-- VISTA: LIMPIEZA -->
         <div id="vistaLimpieza" class="card hidden">
             <button id="btnMostrarFormZona">+ Añadir Zona de Limpieza</button>
             <div id="formZona" class="hidden" style="background: #000000; padding: 20px; border-radius: 12px; margin-bottom: 25px; border: 1px solid #2c2c2e;">
-                <h4 id="tituloFormZona" style="margin-bottom: 20px;">Nueva Zona</h4>
-                <label style="color: #86868b; font-size: 0.9em;">Nombre de la zona:</label>
-                <input type="text" id="nombreZona" placeholder="Ej. Baño Principal, Cocina">
+                <h4 id="tituloFormZona">Nueva Zona</h4>
+                <input type="text" id="nombreZona" placeholder="Ej. Baño Principal">
                 <label style="color: #86868b; font-size: 0.9em; display: block; margin-bottom: 10px;">¿Quién rota en esta zona?</label>
                 <div id="responsablesZona" class="checkbox-group"></div>
                 
@@ -196,14 +198,12 @@
                     <h4 id="tituloSeccionLimpieza" style="margin: 0;">Tareas de la semana</h4>
                     <button id="btnToggleCalendario" class="btn-outline" style="width: auto; padding: 6px 12px; margin: 0; font-size: 0.85em;">📅 Ver Mes</button>
                 </div>
-                
                 <div id="listaLimpieza">Cargando...</div>
-
                 <div id="calendarioMensual" class="hidden">
                     <div style="display: flex; justify-content: space-between; align-items: center; background: #2c2c2e; padding: 12px; border-radius: 10px; margin-bottom: 20px;">
-                        <button id="btnMesAnterior" style="width: auto; margin: 0; padding: 5px 15px; background: none; color: #0a84ff; font-size: 1.4em;">◀</button>
+                        <button id="btnMesAnterior" style="background: none; color: #0a84ff; font-size: 1.4em; width:auto; padding:5px; margin:0;">◀</button>
                         <h4 id="textoMesAnio" style="margin: 0; text-transform: capitalize; color: #f5f5f7;">Cargando...</h4>
-                        <button id="btnMesSiguiente" style="width: auto; margin: 0; padding: 5px 15px; background: none; color: #0a84ff; font-size: 1.4em;">▶</button>
+                        <button id="btnMesSiguiente" style="background: none; color: #0a84ff; font-size: 1.4em; width:auto; padding:5px; margin:0;">▶</button>
                     </div>
                     <div id="contenedorSemanasMes"></div>
                 </div>
