@@ -23,11 +23,12 @@ let idGastoEditando = null;
 let idZonaEditando = null;
 let zonaEditandoFechaBase = null;
 
-// Caché de limpieza y control del calendario
 let zonasLimpiezaCache = []; 
-let fechaCalendario = new Date(); // Controla qué mes estamos viendo
+let fechaCalendario = new Date(); 
 
+// Variables de Sesión (NUEVO CONTROL DE AUTO-LOGIN)
 let misPisos = JSON.parse(localStorage.getItem('misPisos_v2')) || [];
+let ultimoPisoActivo = localStorage.getItem('ultimoPisoActivo');
 
 const pantallaCrear = document.getElementById('pantallaCrear');
 const pantallaUnirse = document.getElementById('pantallaUnirse');
@@ -38,6 +39,7 @@ async function iniciarApp() {
     const urlParams = new URLSearchParams(window.location.search);
     const pisoIdUrl = urlParams.get('id');
 
+    // 1. Si entra por un enlace de invitación nuevo
     if (pisoIdUrl) {
         document.body.classList.add('pantalla-centrada');
         pantallaUnirse.classList.remove('hidden');
@@ -45,10 +47,24 @@ async function iniciarApp() {
         return;
     }
 
+    // 2. Si ya estaba en un piso activo, entra directo (Auto-login)
+    if (ultimoPisoActivo) {
+        const pisoGuardado = misPisos.find(p => p.id === ultimoPisoActivo);
+        if (pisoGuardado) {
+            document.body.classList.remove('pantalla-centrada');
+            nombreUsuario = pisoGuardado.nombreUsuario;
+            idPisoActual = pisoGuardado.id;
+            mostrarDashboard(nombreUsuario, idPisoActual);
+            return;
+        }
+    }
+
+    // 3. Si tiene pisos guardados pero cerró sesión, muestra menú
     if (misPisos.length > 0) {
         document.body.classList.add('pantalla-centrada');
         mostrarPantallaMisPisos();
     } else {
+        // 4. Usuario completamente nuevo
         document.body.classList.add('pantalla-centrada');
         pantallaCrear.classList.remove('hidden');
     }
@@ -70,6 +86,10 @@ function mostrarPantallaMisPisos() {
         btn.onclick = () => {
             document.body.classList.remove('pantalla-centrada');
             pantallaMisPisos.classList.add('hidden');
+            
+            // Guardamos el último piso activo para la próxima vez
+            localStorage.setItem('ultimoPisoActivo', piso.id);
+            
             nombreUsuario = piso.nombreUsuario;
             idPisoActual = piso.id;
             mostrarDashboard(piso.nombreUsuario, piso.id);
@@ -109,9 +129,14 @@ document.getElementById('btnCrear').addEventListener('click', async () => {
             id: idUnico, nombre_piso: nombrePiso, creador: nombresNuevos[0],
             participantes: nombresNuevos, fecha_creacion: new Date().toISOString()
         });
-        const enlaceLocal = `${window.location.origin}${window.location.pathname}?id=${idUnico}`;
-        document.getElementById('resultado').innerHTML = `<span style="color: green; font-weight: bold;">¡Piso creado!</span><br><br>Copia este enlace o pincha para entrar:<br><a href="${enlaceLocal}"><b>${enlaceLocal}</b></a>`;
+        
+        // Transición automática al flujo de Unirse sin tener que pinchar el enlace
+        pantallaCrear.classList.add('hidden');
+        pantallaUnirse.classList.remove('hidden');
         document.getElementById('nombrePiso').value = ""; nombresNuevos = []; actualizarListaNuevosNombres();
+        
+        await cargarPantallaUnirse(idUnico);
+        
     } catch (error) { alert("Error al guardar."); } finally { boton.innerText = "Crear Piso"; boton.disabled = false; }
 });
 
@@ -136,7 +161,11 @@ async function cargarPantallaUnirse(id) {
 function unirseYGuardar(nombre, id, nombrePiso) {
     misPisos = misPisos.filter(piso => piso.id !== id);
     misPisos.push({ id: id, nombrePiso: nombrePiso, nombreUsuario: nombre });
+    
+    // Guardamos en LocalStorage
     localStorage.setItem('misPisos_v2', JSON.stringify(misPisos));
+    localStorage.setItem('ultimoPisoActivo', id);
+    
     nombreUsuario = nombre; idPisoActual = id;
     pantallaUnirse.classList.add('hidden'); document.body.classList.remove('pantalla-centrada');
     window.history.pushState({}, document.title, window.location.pathname);
@@ -157,6 +186,16 @@ async function mostrarDashboard(nombre, id) {
         await cargarListaLimpieza();
     }
 }
+
+// BOTÓN COPIAR ENLACE
+document.getElementById('btnCopiarEnlace').addEventListener('click', () => {
+    const enlace = `${window.location.origin}${window.location.pathname}?id=${idPisoActual}`;
+    navigator.clipboard.writeText(enlace).then(() => {
+        alert("Enlace copiado al portapapeles. ¡Pásalo por WhatsApp!");
+    }).catch(err => {
+        alert("Tu navegador no permite copiar automáticamente. Copia este enlace manualemente:\n\n" + enlace);
+    });
+});
 
 // PESTAÑAS
 document.getElementById('tabGastos').addEventListener('click', () => {
@@ -282,7 +321,6 @@ function calcularBalancesYDeudas(gastos) {
 }
 
 // --- MÓDULO LIMPIEZA & CALENDARIO MENSUAL ---
-
 function resetFormZona() {
     idZonaEditando = null; zonaEditandoFechaBase = null;
     document.getElementById('tituloFormZona').innerText = 'Nueva Zona';
@@ -301,7 +339,6 @@ function prepararFormularioLimpieza() {
 }
 
 window.abrirEditarZona = function(idZona) {
-    // Buscamos la zona en el caché
     const zonaObj = zonasLimpiezaCache.find(z => z.id === idZona);
     if(!zonaObj) return;
 
@@ -361,10 +398,9 @@ async function cargarListaLimpieza() {
     } catch (error) { console.error(error); listaHtml.innerHTML = 'Error al cargar las tareas.'; }
 }
 
-// EL CEREBRO DE LAS ROTACIONES (Aislado para poder predecir el futuro)
 function calcularAsignacionesParaSemana(fechaLunes) {
     let asignaciones = [];
-    let asignadosEstaSemana = []; // Control anti-colisiones
+    let asignadosEstaSemana = []; 
 
     zonasLimpiezaCache.forEach((zona, index) => {
         const lunesBase = new Date(zona.fecha_base).getTime();
@@ -401,7 +437,6 @@ function calcularAsignacionesParaSemana(fechaLunes) {
     return asignaciones;
 }
 
-// Dibuja la pestaña normal de "Tareas de esta semana"
 function renderVistaSemanaActual() {
     const listaHtml = document.getElementById('listaLimpieza');
     if (zonasLimpiezaCache.length === 0) {
@@ -431,7 +466,6 @@ function renderVistaSemanaActual() {
     });
 }
 
-// Dibuja la pestaña del Calendario Mensual Completo
 function renderCalendarioMensual() {
     const contenedor = document.getElementById('contenedorSemanasMes');
     if (zonasLimpiezaCache.length === 0) {
@@ -445,12 +479,10 @@ function renderCalendarioMensual() {
     document.getElementById('textoMesAnio').innerText = `${nombresMeses[mes]} ${anio}`;
     contenedor.innerHTML = '';
 
-    // Extraer todas las semanas (Lunes) que caen en este mes
     let semanas = [];
     let primerDia = new Date(anio, mes, 1);
     let lunesPivot = new Date(obtenerLunes(primerDia));
 
-    // Mientras el lunes sea del mes actual o el domingo de esa semana sea del mes actual
     while (lunesPivot.getMonth() === mes || (new Date(lunesPivot.getTime() + 6*86400000)).getMonth() === mes) {
         semanas.push(new Date(lunesPivot));
         lunesPivot = new Date(lunesPivot.getTime() + 7 * 86400000); 
@@ -487,7 +519,6 @@ function renderCalendarioMensual() {
     });
 }
 
-// BOTONES DE NAVEGACIÓN DEL CALENDARIO
 document.getElementById('btnToggleCalendario').addEventListener('click', () => {
     const vistaSemana = document.getElementById('listaLimpieza');
     const vistaCalendario = document.getElementById('calendarioMensual');
@@ -495,30 +526,22 @@ document.getElementById('btnToggleCalendario').addEventListener('click', () => {
     const titulo = document.getElementById('tituloSeccionLimpieza');
 
     if (vistaCalendario.classList.contains('hidden')) {
-        vistaCalendario.classList.remove('hidden');
-        vistaSemana.classList.add('hidden');
-        btn.innerText = "Ver Semana Actual";
-        titulo.innerText = "Calendario Mensual";
+        vistaCalendario.classList.remove('hidden'); vistaSemana.classList.add('hidden');
+        btn.innerText = "Ver Semana Actual"; titulo.innerText = "Calendario Mensual";
     } else {
-        vistaCalendario.classList.add('hidden');
-        vistaSemana.classList.remove('hidden');
-        btn.innerText = "📅 Ver Mes";
-        titulo.innerText = "Tareas de esta semana";
+        vistaCalendario.classList.add('hidden'); vistaSemana.classList.remove('hidden');
+        btn.innerText = "📅 Ver Mes"; titulo.innerText = "Tareas de esta semana";
     }
 });
 
-document.getElementById('btnMesAnterior').addEventListener('click', () => {
-    fechaCalendario = new Date(fechaCalendario.getFullYear(), fechaCalendario.getMonth() - 1, 1);
-    renderCalendarioMensual();
-});
+document.getElementById('btnMesAnterior').addEventListener('click', () => { fechaCalendario = new Date(fechaCalendario.getFullYear(), fechaCalendario.getMonth() - 1, 1); renderCalendarioMensual(); });
+document.getElementById('btnMesSiguiente').addEventListener('click', () => { fechaCalendario = new Date(fechaCalendario.getFullYear(), fechaCalendario.getMonth() + 1, 1); renderCalendarioMensual(); });
 
-document.getElementById('btnMesSiguiente').addEventListener('click', () => {
-    fechaCalendario = new Date(fechaCalendario.getFullYear(), fechaCalendario.getMonth() + 1, 1);
-    renderCalendarioMensual();
+document.getElementById('btnVolverMenu').addEventListener('click', () => { 
+    // Borramos el último piso activo para que pare en el menú
+    localStorage.removeItem('ultimoPisoActivo');
+    window.location.href = window.location.pathname; 
 });
-
-// VOLVER AL MENÚ
-document.getElementById('btnVolverMenu').addEventListener('click', () => { window.location.href = window.location.pathname; });
 
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(err => console.log('Fallo SW: ', err)); });
