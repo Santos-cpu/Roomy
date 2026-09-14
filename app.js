@@ -23,9 +23,12 @@ let idGastoEditando = null;
 let idZonaEditando = null;
 let zonaEditandoFechaBase = null;
 
+// Caché de limpieza y control del calendario
+let zonasLimpiezaCache = []; 
+let fechaCalendario = new Date(); // Controla qué mes estamos viendo
+
 let misPisos = JSON.parse(localStorage.getItem('misPisos_v2')) || [];
 
-// Referencias HTML
 const pantallaCrear = document.getElementById('pantallaCrear');
 const pantallaUnirse = document.getElementById('pantallaUnirse');
 const pantallaMisPisos = document.getElementById('pantallaMisPisos');
@@ -51,8 +54,7 @@ async function iniciarApp() {
     }
 }
 
-// --- PANTALLAS DE INICIO ---
-
+// --- PANTALLAS INICIO ---
 function mostrarPantallaMisPisos() {
     pantallaMisPisos.classList.remove('hidden');
     pantallaCrear.classList.add('hidden');
@@ -76,23 +78,16 @@ function mostrarPantallaMisPisos() {
     });
 }
 
-document.getElementById('btnIrCrearPiso').addEventListener('click', () => {
-    pantallaMisPisos.classList.add('hidden'); pantallaCrear.classList.remove('hidden');
-});
-document.getElementById('btnCancelarCrear').addEventListener('click', () => {
-    pantallaCrear.classList.add('hidden'); pantallaMisPisos.classList.remove('hidden');
-});
+document.getElementById('btnIrCrearPiso').addEventListener('click', () => { pantallaMisPisos.classList.add('hidden'); pantallaCrear.classList.remove('hidden'); });
+document.getElementById('btnCancelarCrear').addEventListener('click', () => { pantallaCrear.classList.add('hidden'); pantallaMisPisos.classList.remove('hidden'); });
 
 document.getElementById('btnAñadirNombre').addEventListener('click', () => {
     const input = document.getElementById('inputNuevoNombre');
     const nombre = input.value.trim();
     if (nombre && !nombresNuevos.includes(nombre)) {
-        nombresNuevos.push(nombre);
-        actualizarListaNuevosNombres();
-        input.value = '';
+        nombresNuevos.push(nombre); actualizarListaNuevosNombres(); input.value = '';
     }
 });
-
 function actualizarListaNuevosNombres() {
     const contenedor = document.getElementById('contenedorNuevosNombres');
     contenedor.innerHTML = '';
@@ -100,9 +95,7 @@ function actualizarListaNuevosNombres() {
         contenedor.innerHTML += `<div class="tag-nombre"><span>👤 ${nombre}</span><span class="tag-eliminar" onclick="quitarNombre(${index})">✕</span></div>`;
     });
 }
-window.quitarNombre = function(index) {
-    nombresNuevos.splice(index, 1); actualizarListaNuevosNombres();
-};
+window.quitarNombre = function(index) { nombresNuevos.splice(index, 1); actualizarListaNuevosNombres(); };
 
 document.getElementById('btnCrear').addEventListener('click', async () => {
     const nombrePiso = document.getElementById('nombrePiso').value;
@@ -111,7 +104,6 @@ document.getElementById('btnCrear').addEventListener('click', async () => {
     
     boton.innerText = "Creando..."; boton.disabled = true;
     const idUnico = 'piso-' + Math.random().toString(36).substring(2, 8);
-    
     try {
         await setDoc(doc(db, "grupos", idUnico), {
             id: idUnico, nombre_piso: nombrePiso, creador: nombresNuevos[0],
@@ -177,7 +169,6 @@ document.getElementById('tabLimpieza').addEventListener('click', () => {
 });
 
 // --- MÓDULO GASTOS ---
-
 function resetFormGasto() {
     idGastoEditando = null;
     document.getElementById('tituloFormGasto').innerText = 'Nuevo Gasto';
@@ -188,16 +179,8 @@ function resetFormGasto() {
     prepararFormularioGastos();
 }
 
-document.getElementById('btnMostrarFormGasto').addEventListener('click', () => {
-    resetFormGasto();
-    document.getElementById('formGasto').classList.remove('hidden');
-    document.getElementById('btnMostrarFormGasto').classList.add('hidden');
-});
-
-document.getElementById('btnCancelarGasto').addEventListener('click', () => {
-    document.getElementById('formGasto').classList.add('hidden');
-    document.getElementById('btnMostrarFormGasto').classList.remove('hidden');
-});
+document.getElementById('btnMostrarFormGasto').addEventListener('click', () => { resetFormGasto(); document.getElementById('formGasto').classList.remove('hidden'); document.getElementById('btnMostrarFormGasto').classList.add('hidden'); });
+document.getElementById('btnCancelarGasto').addEventListener('click', () => { document.getElementById('formGasto').classList.add('hidden'); document.getElementById('btnMostrarFormGasto').classList.remove('hidden'); });
 
 function prepararFormularioGastos() {
     const selectPagador = document.getElementById('pagadorGasto');
@@ -213,68 +196,36 @@ function prepararFormularioGastos() {
 }
 
 window.abrirEditarGasto = function(gastoObj) {
-    idGastoEditando = gastoObj.id;
-    prepararFormularioGastos();
-    
+    idGastoEditando = gastoObj.id; prepararFormularioGastos();
     document.getElementById('tituloFormGasto').innerText = 'Editar Gasto';
     document.getElementById('conceptoGasto').value = gastoObj.concepto;
     document.getElementById('importeGasto').value = gastoObj.importe;
     document.getElementById('pagadorGasto').value = gastoObj.pagador;
-    
     const checkboxes = document.querySelectorAll('#involucradosGasto input[type="checkbox"]');
-    checkboxes.forEach(cb => {
-        cb.checked = gastoObj.involucrados.includes(cb.value);
-    });
-
+    checkboxes.forEach(cb => { cb.checked = gastoObj.involucrados.includes(cb.value); });
     document.getElementById('btnGuardarGasto').innerText = 'Actualizar Gasto';
     document.getElementById('btnEliminarGasto').classList.remove('hidden');
-    
-    document.getElementById('formGasto').classList.remove('hidden');
-    document.getElementById('btnMostrarFormGasto').classList.add('hidden');
+    document.getElementById('formGasto').classList.remove('hidden'); document.getElementById('btnMostrarFormGasto').classList.add('hidden');
     document.getElementById('formGasto').scrollIntoView({ behavior: 'smooth' });
 };
 
 document.getElementById('btnEliminarGasto').addEventListener('click', async () => {
-    if (!confirm("¿Seguro que quieres eliminar este gasto? Esto recalculará las deudas.")) return;
-    const boton = document.getElementById('btnEliminarGasto');
-    boton.innerText = "Borrando..."; boton.disabled = true;
-    try {
-        await deleteDoc(doc(db, "grupos", idPisoActual, "gastos", idGastoEditando));
-        document.getElementById('btnCancelarGasto').click();
-        await cargarListaGastos();
-    } catch (error) { alert("Error al eliminar."); } finally { boton.innerText = "Eliminar"; boton.disabled = false; }
+    if (!confirm("¿Seguro que quieres eliminar este gasto?")) return;
+    const boton = document.getElementById('btnEliminarGasto'); boton.innerText = "Borrando..."; boton.disabled = true;
+    try { await deleteDoc(doc(db, "grupos", idPisoActual, "gastos", idGastoEditando)); document.getElementById('btnCancelarGasto').click(); await cargarListaGastos(); } catch (error) { alert("Error al eliminar."); } finally { boton.innerText = "Eliminar"; boton.disabled = false; }
 });
 
 document.getElementById('btnGuardarGasto').addEventListener('click', async () => {
-    const concepto = document.getElementById('conceptoGasto').value; 
-    const importeStr = document.getElementById('importeGasto').value;
-    const pagador = document.getElementById('pagadorGasto').value; 
-    const boton = document.getElementById('btnGuardarGasto');
-    
-    const checkboxes = document.querySelectorAll('#involucradosGasto input[type="checkbox"]:checked');
-    const involucrados = Array.from(checkboxes).map(cb => cb.value);
-    
+    const concepto = document.getElementById('conceptoGasto').value; const importeStr = document.getElementById('importeGasto').value;
+    const pagador = document.getElementById('pagadorGasto').value; const boton = document.getElementById('btnGuardarGasto');
+    const checkboxes = document.querySelectorAll('#involucradosGasto input[type="checkbox"]:checked'); const involucrados = Array.from(checkboxes).map(cb => cb.value);
     if (!concepto || !importeStr || involucrados.length === 0) { alert("Faltan datos."); return; }
-    
-    boton.innerText = idGastoEditando ? "Actualizando..." : "Guardando..."; 
-    boton.disabled = true;
-    
-    const datosGasto = {
-        concepto: concepto, 
-        importe: parseFloat(importeStr), 
-        pagador: pagador, 
-        involucrados: involucrados
-    };
-
+    boton.innerText = idGastoEditando ? "Actualizando..." : "Guardando..."; boton.disabled = true;
+    const datosGasto = { concepto: concepto, importe: parseFloat(importeStr), pagador: pagador, involucrados: involucrados };
     try {
-        if (idGastoEditando) {
-            await updateDoc(doc(db, "grupos", idPisoActual, "gastos", idGastoEditando), datosGasto);
-        } else {
-            datosGasto.fecha = new Date().toISOString();
-            await addDoc(collection(db, "grupos", idPisoActual, "gastos"), datosGasto);
-        }
-        document.getElementById('btnCancelarGasto').click(); 
-        await cargarListaGastos();
+        if (idGastoEditando) { await updateDoc(doc(db, "grupos", idPisoActual, "gastos", idGastoEditando), datosGasto); } 
+        else { datosGasto.fecha = new Date().toISOString(); await addDoc(collection(db, "grupos", idPisoActual, "gastos"), datosGasto); }
+        document.getElementById('btnCancelarGasto').click(); await cargarListaGastos();
     } catch (error) { alert("Error al guardar."); } finally { boton.disabled = false; }
 });
 
@@ -284,39 +235,16 @@ async function cargarListaGastos() {
         const q = query(collection(db, "grupos", idPisoActual, "gastos"), orderBy("fecha", "desc"));
         const querySnapshot = await getDocs(q);
         let gastosTotales = [];
-        
         if (querySnapshot.empty) {
             listaHtml.innerHTML = '<p style="color:#666; text-align:center;">No hay gastos todavía.</p>';
             document.getElementById('listaBalances').innerHTML = '<p style="color:#666;">Sin actividad</p>';
             document.getElementById('listaDeudas').innerHTML = ''; return;
         }
-        
         listaHtml.innerHTML = '';
         querySnapshot.forEach((docSnap) => {
-            const gasto = docSnap.data(); 
-            gasto.id = docSnap.id;
-            gastosTotales.push(gasto); 
-            
-            const divGasto = document.createElement('div'); 
-            divGasto.className = 'item-lista';
-            
-            const divInfo = document.createElement('div');
-            divInfo.className = 'item-info';
-            divInfo.innerHTML = `<span class="item-titulo">${gasto.concepto}</span><span class="item-detalle">${gasto.pagador} pagó para ${gasto.involucrados.length} • ${new Date(gasto.fecha).toLocaleDateString('es-ES')}</span>`;
-            
-            const divDerecha = document.createElement('div');
-            divDerecha.style.cssText = 'display: flex; align-items: center; gap: 10px;';
-            divDerecha.innerHTML = `<span class="gasto-importe">${gasto.importe.toFixed(2)}€</span>`;
-            
-            const btnEditar = document.createElement('button');
-            btnEditar.innerHTML = '✏️';
-            btnEditar.style.cssText = 'background:none; border:none; padding:0; cursor:pointer; font-size:1.4em; width:auto; margin:0;';
-            btnEditar.onclick = () => window.abrirEditarGasto(gasto);
-            
-            divDerecha.appendChild(btnEditar);
-            divGasto.appendChild(divInfo);
-            divGasto.appendChild(divDerecha);
-            
+            const gasto = docSnap.data(); gasto.id = docSnap.id; gastosTotales.push(gasto); 
+            const divGasto = document.createElement('div'); divGasto.className = 'item-lista';
+            divGasto.innerHTML = `<div class="item-info"><span class="item-titulo">${gasto.concepto}</span><span class="item-detalle">${gasto.pagador} pagó para ${gasto.involucrados.length} • ${new Date(gasto.fecha).toLocaleDateString('es-ES')}</span></div><div style="display: flex; align-items: center; gap: 10px;"><span class="gasto-importe">${gasto.importe.toFixed(2)}€</span><button style="background:none; border:none; padding:0; cursor:pointer; font-size:1.4em; margin:0;" onclick='window.abrirEditarGasto(${JSON.stringify(gasto).replace(/'/g, "\\'")})'>✏️</button></div>`;
             listaHtml.appendChild(divGasto);
         });
         calcularBalancesYDeudas(gastosTotales);
@@ -332,8 +260,7 @@ function calcularBalancesYDeudas(gastos) {
     });
     let htmlBalances = ''; let deudores = []; let acreedores = [];
     for (let persona in balances) {
-        let saldo = balances[persona];
-        let color = saldo >= -0.01 && saldo <= 0.01 ? 'black' : (saldo > 0 ? 'green' : 'red');
+        let saldo = balances[persona]; let color = saldo >= -0.01 && saldo <= 0.01 ? 'black' : (saldo > 0 ? 'green' : 'red');
         htmlBalances += `<div class="balance-item"><span>${persona}</span><span style="color: ${color}; font-weight: bold;">${saldo.toFixed(2)}€</span></div>`;
         if (saldo < -0.01) deudores.push({ nombre: persona, cantidad: Math.abs(saldo) });
         if (saldo > 0.01) acreedores.push({ nombre: persona, cantidad: saldo });
@@ -354,11 +281,10 @@ function calcularBalancesYDeudas(gastos) {
     document.getElementById('listaDeudas').innerHTML = htmlDeudas;
 }
 
-// --- MÓDULO LIMPIEZA ---
+// --- MÓDULO LIMPIEZA & CALENDARIO MENSUAL ---
 
 function resetFormZona() {
-    idZonaEditando = null;
-    zonaEditandoFechaBase = null;
+    idZonaEditando = null; zonaEditandoFechaBase = null;
     document.getElementById('tituloFormZona').innerText = 'Nueva Zona';
     document.getElementById('nombreZona').value = '';
     document.getElementById('btnGuardarZona').innerText = 'Guardar Zona';
@@ -366,91 +292,54 @@ function resetFormZona() {
     prepararFormularioLimpieza();
 }
 
-document.getElementById('btnMostrarFormZona').addEventListener('click', () => {
-    resetFormZona();
-    document.getElementById('formZona').classList.remove('hidden'); 
-    document.getElementById('btnMostrarFormZona').classList.add('hidden');
-});
-
-document.getElementById('btnCancelarZona').addEventListener('click', () => {
-    document.getElementById('formZona').classList.add('hidden'); 
-    document.getElementById('btnMostrarFormZona').classList.remove('hidden');
-});
+document.getElementById('btnMostrarFormZona').addEventListener('click', () => { resetFormZona(); document.getElementById('formZona').classList.remove('hidden'); document.getElementById('btnMostrarFormZona').classList.add('hidden'); });
+document.getElementById('btnCancelarZona').addEventListener('click', () => { document.getElementById('formZona').classList.add('hidden'); document.getElementById('btnMostrarFormZona').classList.remove('hidden'); });
 
 function prepararFormularioLimpieza() {
-    const divResponsables = document.getElementById('responsablesZona');
-    divResponsables.innerHTML = '';
-    participantesGrupo.forEach(participante => {
-        const label = document.createElement('label'); 
-        label.innerHTML = `<input type="checkbox" value="${participante}" checked> ${participante}`;
-        divResponsables.appendChild(label);
-    });
+    const divResponsables = document.getElementById('responsablesZona'); divResponsables.innerHTML = '';
+    participantesGrupo.forEach(participante => { divResponsables.innerHTML += `<label><input type="checkbox" value="${participante}" checked> ${participante}</label>`; });
 }
 
-window.abrirEditarZona = function(zonaObj) {
-    idZonaEditando = zonaObj.id;
-    zonaEditandoFechaBase = zonaObj.fecha_base;
+window.abrirEditarZona = function(idZona) {
+    // Buscamos la zona en el caché
+    const zonaObj = zonasLimpiezaCache.find(z => z.id === idZona);
+    if(!zonaObj) return;
+
+    idZonaEditando = zonaObj.id; zonaEditandoFechaBase = zonaObj.fecha_base;
     prepararFormularioLimpieza();
-    
     document.getElementById('tituloFormZona').innerText = 'Editar Zona';
     document.getElementById('nombreZona').value = zonaObj.nombre_zona;
     
     const checkboxes = document.querySelectorAll('#responsablesZona input[type="checkbox"]');
-    checkboxes.forEach(cb => {
-        cb.checked = zonaObj.responsables.includes(cb.value);
-    });
+    checkboxes.forEach(cb => { cb.checked = zonaObj.responsables.includes(cb.value); });
 
-    document.getElementById('btnGuardarZona').innerText = 'Actualizar Zona';
-    document.getElementById('btnEliminarZona').classList.remove('hidden');
-    
-    document.getElementById('formZona').classList.remove('hidden');
-    document.getElementById('btnMostrarFormZona').classList.add('hidden');
+    document.getElementById('btnGuardarZona').innerText = 'Actualizar Zona'; document.getElementById('btnEliminarZona').classList.remove('hidden');
+    document.getElementById('formZona').classList.remove('hidden'); document.getElementById('btnMostrarFormZona').classList.add('hidden');
     document.getElementById('formZona').scrollIntoView({ behavior: 'smooth' });
 };
 
 document.getElementById('btnEliminarZona').addEventListener('click', async () => {
     if (!confirm("¿Seguro que quieres eliminar esta zona de limpieza?")) return;
-    const boton = document.getElementById('btnEliminarZona');
-    boton.innerText = "Borrando..."; boton.disabled = true;
-    try {
-        await deleteDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZonaEditando));
-        document.getElementById('btnCancelarZona').click();
-        await cargarListaLimpieza();
-    } catch (error) { alert("Error al eliminar."); } finally { boton.innerText = "Eliminar"; boton.disabled = false; }
+    const boton = document.getElementById('btnEliminarZona'); boton.innerText = "Borrando..."; boton.disabled = true;
+    try { await deleteDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZonaEditando)); document.getElementById('btnCancelarZona').click(); await cargarListaLimpieza(); } catch (error) { alert("Error al eliminar."); } finally { boton.innerText = "Eliminar"; boton.disabled = false; }
 });
 
 function obtenerLunes(fecha) {
-    let d = new Date(fecha);
-    let day = d.getDay();
-    let diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    let d = new Date(fecha); let day = d.getDay(); let diff = d.getDate() - day + (day === 0 ? -6 : 1);
     return new Date(d.setDate(diff)).setHours(0,0,0,0);
 }
 
 document.getElementById('btnGuardarZona').addEventListener('click', async () => {
-    const nombreZona = document.getElementById('nombreZona').value;
-    const boton = document.getElementById('btnGuardarZona');
-    const checkboxes = document.querySelectorAll('#responsablesZona input[type="checkbox"]:checked');
-    const responsables = Array.from(checkboxes).map(cb => cb.value);
-
+    const nombreZona = document.getElementById('nombreZona').value; const boton = document.getElementById('btnGuardarZona');
+    const checkboxes = document.querySelectorAll('#responsablesZona input[type="checkbox"]:checked'); const responsables = Array.from(checkboxes).map(cb => cb.value);
     if (!nombreZona || responsables.length === 0) { alert("Rellena la zona y selecciona responsables."); return; }
-
-    boton.innerText = idZonaEditando ? "Actualizando..." : "Guardando..."; 
-    boton.disabled = true;
     
-    const datosZona = {
-        nombre_zona: nombreZona,
-        responsables: responsables
-    };
-
+    boton.innerText = idZonaEditando ? "Actualizando..." : "Guardando..."; boton.disabled = true;
+    const datosZona = { nombre_zona: nombreZona, responsables: responsables };
     try {
-        if (idZonaEditando) {
-            await updateDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZonaEditando), datosZona);
-        } else {
-            datosZona.fecha_base = new Date(obtenerLunes(new Date())).toISOString();
-            await addDoc(collection(db, "grupos", idPisoActual, "zonas_limpieza"), datosZona);
-        }
-        document.getElementById('btnCancelarZona').click(); 
-        await cargarListaLimpieza();
+        if (idZonaEditando) { await updateDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZonaEditando), datosZona); } 
+        else { datosZona.fecha_base = new Date(obtenerLunes(new Date())).toISOString(); await addDoc(collection(db, "grupos", idPisoActual, "zonas_limpieza"), datosZona); }
+        document.getElementById('btnCancelarZona').click(); await cargarListaLimpieza();
     } catch (error) { alert("Error al guardar."); } finally { boton.disabled = false; }
 });
 
@@ -460,90 +349,179 @@ async function cargarListaLimpieza() {
         const q = query(collection(db, "grupos", idPisoActual, "zonas_limpieza"));
         const querySnapshot = await getDocs(q);
         
-        if (querySnapshot.empty) {
-            listaHtml.innerHTML = '<p style="color:#666; text-align:center;">Aún no hay zonas de limpieza creadas.</p>'; return;
+        zonasLimpiezaCache = [];
+        if (!querySnapshot.empty) {
+            querySnapshot.forEach((docSnap) => { const z = docSnap.data(); z.id = docSnap.id; zonasLimpiezaCache.push(z); });
+            zonasLimpiezaCache.sort((a, b) => a.nombre_zona.localeCompare(b.nombre_zona));
         }
 
-        let zonas = [];
-        querySnapshot.forEach((docSnap) => {
-            const z = docSnap.data();
-            z.id = docSnap.id;
-            zonas.push(z);
-        });
-        
-        zonas.sort((a, b) => a.nombre_zona.localeCompare(b.nombre_zona));
-        listaHtml.innerHTML = '';
-        const lunesActual = obtenerLunes(new Date());
+        renderVistaSemanaActual();
+        renderCalendarioMensual();
 
-        // LÓGICA ANTI-COLISIONES DE LIMPIEZA
-        let asignadosEstaSemana = []; // Guardará quiénes ya tienen una tarea asignada esta semana
-
-        zonas.forEach((zona) => {
-            const lunesBase = new Date(zona.fecha_base).getTime();
-            let semanasTranscurridas = Math.floor((lunesActual - lunesBase) / 604800000);
-            if (semanasTranscurridas < 0) semanasTranscurridas = 0;
-
-            const numResponsables = zona.responsables.length;
-            
-            // Calculamos a quién le tocaría idealmente
-            let indiceIdeal = semanasTranscurridas % numResponsables;
-            let leTocaA = zona.responsables[indiceIdeal];
-            
-            let libreEncontrado = false;
-
-            // Recorremos la lista de la zona buscando a la primera persona que NO tenga tarea asignada
-            for (let i = 0; i < numResponsables; i++) {
-                let indicePrueba = (indiceIdeal + i) % numResponsables;
-                let candidato = zona.responsables[indicePrueba];
-                
-                if (!asignadosEstaSemana.includes(candidato)) {
-                    leTocaA = candidato;
-                    asignadosEstaSemana.push(candidato); // Lo marcamos como ocupado
-                    libreEncontrado = true;
-                    break;
-                }
-            }
-            
-            // Si todos estaban ocupados (ej. hay más tareas que personas), fallamos al ideal
-            if (!libreEncontrado) {
-                leTocaA = zona.responsables[indiceIdeal];
-            }
-
-            const divZona = document.createElement('div');
-            divZona.className = 'item-lista ' + (leTocaA === nombreUsuario ? 'mi-turno' : '');
-            
-            const rotacionVisual = zona.responsables.join(' ➔ ');
-
-            const divInfo = document.createElement('div');
-            divInfo.className = 'item-info';
-            divInfo.innerHTML = `<span class="item-titulo">${zona.nombre_zona}</span><span class="item-detalle">Rotación: ${rotacionVisual}</span>`;
-            
-            const divDerecha = document.createElement('div');
-            divDerecha.style.cssText = 'display: flex; align-items: center; gap: 15px;';
-            divDerecha.innerHTML = `<div style="font-weight: bold; font-size: 1.1em; color: ${leTocaA === nombreUsuario ? '#155724' : '#333'}">${leTocaA === nombreUsuario ? '¡Te toca!' : leTocaA}</div>`;
-            
-            const btnEditar = document.createElement('button');
-            btnEditar.innerHTML = '✏️';
-            btnEditar.style.cssText = 'background:none; border:none; padding:0; cursor:pointer; font-size:1.4em; width:auto; margin:0;';
-            btnEditar.onclick = () => window.abrirEditarZona(zona);
-            
-            divDerecha.appendChild(btnEditar);
-            divZona.appendChild(divInfo);
-            divZona.appendChild(divDerecha);
-            
-            listaHtml.appendChild(divZona);
-        });
     } catch (error) { console.error(error); listaHtml.innerHTML = 'Error al cargar las tareas.'; }
 }
 
-document.getElementById('btnVolverMenu').addEventListener('click', () => {
-    window.location.href = window.location.pathname; 
+// EL CEREBRO DE LAS ROTACIONES (Aislado para poder predecir el futuro)
+function calcularAsignacionesParaSemana(fechaLunes) {
+    let asignaciones = [];
+    let asignadosEstaSemana = []; // Control anti-colisiones
+
+    zonasLimpiezaCache.forEach((zona, index) => {
+        const lunesBase = new Date(zona.fecha_base).getTime();
+        let semanasTranscurridas = Math.floor((fechaLunes.getTime() - lunesBase) / 604800000);
+        if (semanasTranscurridas < 0) semanasTranscurridas = 0;
+
+        const numResponsables = zona.responsables.length;
+        let indiceIdeal = (semanasTranscurridas + index) % numResponsables;
+        let leTocaA = zona.responsables[indiceIdeal];
+        let libreEncontrado = false;
+
+        for (let i = 0; i < numResponsables; i++) {
+            let indicePrueba = (indiceIdeal + i) % numResponsables;
+            let candidato = zona.responsables[indicePrueba];
+            
+            if (!asignadosEstaSemana.includes(candidato)) {
+                leTocaA = candidato;
+                asignadosEstaSemana.push(candidato);
+                libreEncontrado = true;
+                break;
+            }
+        }
+        
+        if (!libreEncontrado) leTocaA = zona.responsables[indiceIdeal];
+
+        asignaciones.push({
+            idZona: zona.id,
+            nombre_zona: zona.nombre_zona,
+            responsables: zona.responsables,
+            leTocaA: leTocaA
+        });
+    });
+
+    return asignaciones;
+}
+
+// Dibuja la pestaña normal de "Tareas de esta semana"
+function renderVistaSemanaActual() {
+    const listaHtml = document.getElementById('listaLimpieza');
+    if (zonasLimpiezaCache.length === 0) {
+        listaHtml.innerHTML = '<p style="color:#666; text-align:center;">Aún no hay zonas creadas.</p>'; return;
+    }
+
+    const lunesActual = new Date(obtenerLunes(new Date()));
+    const asignaciones = calcularAsignacionesParaSemana(lunesActual);
+
+    listaHtml.innerHTML = '';
+    asignaciones.forEach((asig) => {
+        const divZona = document.createElement('div');
+        divZona.className = 'item-lista ' + (asig.leTocaA === nombreUsuario ? 'mi-turno' : '');
+        const rotacionVisual = asig.responsables.join(' ➔ ');
+
+        divZona.innerHTML = `
+            <div class="item-info">
+                <span class="item-titulo">${asig.nombre_zona}</span>
+                <span class="item-detalle">Rotación: ${rotacionVisual}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div style="font-weight: bold; font-size: 1.1em; color: ${asig.leTocaA === nombreUsuario ? '#155724' : '#333'}">${asig.leTocaA === nombreUsuario ? '¡Te toca!' : asig.leTocaA}</div>
+                <button style="background:none; border:none; padding:0; cursor:pointer; font-size:1.4em; margin:0;" onclick='window.abrirEditarZona("${asig.idZona}")'>✏️</button>
+            </div>
+        `;
+        listaHtml.appendChild(divZona);
+    });
+}
+
+// Dibuja la pestaña del Calendario Mensual Completo
+function renderCalendarioMensual() {
+    const contenedor = document.getElementById('contenedorSemanasMes');
+    if (zonasLimpiezaCache.length === 0) {
+        contenedor.innerHTML = '<p style="color:#666; text-align:center;">Aún no hay zonas creadas.</p>'; return;
+    }
+
+    const mes = fechaCalendario.getMonth();
+    const anio = fechaCalendario.getFullYear();
+    const nombresMeses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+    
+    document.getElementById('textoMesAnio').innerText = `${nombresMeses[mes]} ${anio}`;
+    contenedor.innerHTML = '';
+
+    // Extraer todas las semanas (Lunes) que caen en este mes
+    let semanas = [];
+    let primerDia = new Date(anio, mes, 1);
+    let lunesPivot = new Date(obtenerLunes(primerDia));
+
+    // Mientras el lunes sea del mes actual o el domingo de esa semana sea del mes actual
+    while (lunesPivot.getMonth() === mes || (new Date(lunesPivot.getTime() + 6*86400000)).getMonth() === mes) {
+        semanas.push(new Date(lunesPivot));
+        lunesPivot = new Date(lunesPivot.getTime() + 7 * 86400000); 
+    }
+
+    const lunesActualHoy = new Date(obtenerLunes(new Date())).getTime();
+
+    semanas.forEach(lunesSemana => {
+        const asignaciones = calcularAsignacionesParaSemana(lunesSemana);
+        const domingoSemana = new Date(lunesSemana.getTime() + 6*86400000);
+        
+        let textoFechas = `Del ${lunesSemana.getDate()} ${nombresMeses[lunesSemana.getMonth()].substring(0,3)} al ${domingoSemana.getDate()} ${nombresMeses[domingoSemana.getMonth()].substring(0,3)}`;
+        
+        const esSemanaActual = lunesSemana.getTime() === lunesActualHoy;
+        const badge = esSemanaActual ? `<span style="background: #28a745; color: white; padding: 2px 6px; border-radius: 10px; font-size: 0.7em; margin-left: 5px; vertical-align: middle;">Actual</span>` : '';
+
+        const divSemana = document.createElement('div');
+        divSemana.style.cssText = `background: white; border: ${esSemanaActual ? '2px solid #28a745' : '1px solid #ddd'}; border-radius: 8px; padding: 12px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);`;
+
+        let htmlSemana = `<h5 style="margin: 0 0 10px 0; color: #007bff; border-bottom: 1px solid #eee; padding-bottom: 8px;">📅 ${textoFechas} ${badge}</h5>`;
+
+        asignaciones.forEach(asig => {
+            const esMiTurno = asig.leTocaA === nombreUsuario;
+            htmlSemana += `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 0.95em; ${esMiTurno ? 'background: #d4edda; padding: 4px 8px; border-radius: 4px; border-left: 3px solid #28a745;' : 'padding: 4px 8px;'}">
+                    <span style="font-weight: bold; color: #444;">${asig.nombre_zona}</span>
+                    <span style="color: ${esMiTurno ? '#155724' : '#555'}; font-weight: ${esMiTurno ? 'bold' : 'normal'};">${esMiTurno ? '¡Te toca!' : asig.leTocaA}</span>
+                </div>
+            `;
+        });
+
+        divSemana.innerHTML = htmlSemana;
+        contenedor.appendChild(divSemana);
+    });
+}
+
+// BOTONES DE NAVEGACIÓN DEL CALENDARIO
+document.getElementById('btnToggleCalendario').addEventListener('click', () => {
+    const vistaSemana = document.getElementById('listaLimpieza');
+    const vistaCalendario = document.getElementById('calendarioMensual');
+    const btn = document.getElementById('btnToggleCalendario');
+    const titulo = document.getElementById('tituloSeccionLimpieza');
+
+    if (vistaCalendario.classList.contains('hidden')) {
+        vistaCalendario.classList.remove('hidden');
+        vistaSemana.classList.add('hidden');
+        btn.innerText = "Ver Semana Actual";
+        titulo.innerText = "Calendario Mensual";
+    } else {
+        vistaCalendario.classList.add('hidden');
+        vistaSemana.classList.remove('hidden');
+        btn.innerText = "📅 Ver Mes";
+        titulo.innerText = "Tareas de esta semana";
+    }
 });
 
+document.getElementById('btnMesAnterior').addEventListener('click', () => {
+    fechaCalendario = new Date(fechaCalendario.getFullYear(), fechaCalendario.getMonth() - 1, 1);
+    renderCalendarioMensual();
+});
+
+document.getElementById('btnMesSiguiente').addEventListener('click', () => {
+    fechaCalendario = new Date(fechaCalendario.getFullYear(), fechaCalendario.getMonth() + 1, 1);
+    renderCalendarioMensual();
+});
+
+// VOLVER AL MENÚ
+document.getElementById('btnVolverMenu').addEventListener('click', () => { window.location.href = window.location.pathname; });
+
 if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch(err => console.log('Fallo SW: ', err));
-    });
+    window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(err => console.log('Fallo SW: ', err)); });
 }
 
 iniciarApp();
