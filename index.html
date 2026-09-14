@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App Piso Estudiantes</title>
+    
+    <!-- NUEVO: Etiquetas para PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#007bff">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; max-width: 400px; margin: 0 auto; background-color: #f4f4f9; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        input, button, select { width: 100%; margin-bottom: 15px; padding: 12px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+        button { background-color: #007bff; color: white; border: none; font-weight: bold; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        
+        .btn-name { background-color: #28a745; margin-bottom: 10px; font-size: 1.1em; }
+        .btn-name:hover { background-color: #218838; }
+        .btn-secundario { background-color: #6c757d; }
+        .btn-secundario:hover { background-color: #5a6268; }
+        .hidden { display: none !important; }
+        
+        /* Estilos Pestañas */
+        .tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid #ddd; }
+        .tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; color: #666; font-weight: bold; }
+        .tab.active { border-bottom: 3px solid #007bff; color: #007bff; }
+        
+        /* Estilos Gastos y Limpieza */
+        .item-lista { border-bottom: 1px solid #eee; padding: 12px 0; display: flex; justify-content: space-between; align-items: center; }
+        .item-info { display: flex; flex-direction: column; }
+        .item-titulo { font-weight: bold; font-size: 1.05em; }
+        .item-detalle { font-size: 0.85em; color: #666; margin-top: 3px; }
+        .gasto-importe { font-weight: bold; color: #dc3545; font-size: 1.1em; }
+        
+        .checkbox-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 15px; }
+        .checkbox-group label { display: flex; align-items: center; gap: 8px; font-weight: normal; }
+        .checkbox-group input { width: auto; margin: 0; }
+        
+        .balance-item { display: flex; justify-content: space-between; border-bottom: 1px solid #f0f0f0; padding: 8px 0; }
+        .deuda-item { background: #e9ecef; padding: 10px; border-radius: 6px; margin-bottom: 5px; font-size: 0.9em; }
+        
+        .mi-turno { background-color: #d4edda; padding: 10px; border-radius: 8px; border-left: 5px solid #28a745; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+    <div id="pantallaCrear" class="card hidden">
+        <h2>🏡 Crear Nuevo Piso</h2>
+        <label>Nombre del piso:</label>
+        <input type="text" id="nombrePiso" placeholder="Ej. Piso Ciudad Real">
+        <label>Inquilinos (separados por coma):</label>
+        <input type="text" id="nombresInquilinos" placeholder="Ej. Diego, Ana, Carlos">
+        <button id="btnCrear">Crear Piso</button>
+        <div id="resultado" style="margin-top: 15px; font-size: 0.9em; word-wrap: break-word;"></div>
+    </div>
+
+    <div id="pantallaUnirse" class="card hidden">
+        <h2 id="tituloUnirse">Cargando piso...</h2>
+        <p>Selecciona tu nombre para entrar:</p>
+        <div id="listaNombres"></div>
+    </div>
+
+    <div id="pantallaDashboard" class="hidden">
+        
+        <div class="card" style="padding-bottom: 5px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h3 id="tituloDashboard" style="margin: 0;">Piso</h3>
+                <span id="nombreUsuarioActual" style="background: #e9ecef; padding: 5px 10px; border-radius: 15px; font-size: 0.9em; font-weight: bold;"></span>
+            </div>
+            <button id="btnSalir" style="background: none; color: #dc3545; font-size: 0.8em; text-align: right; padding: 0; margin-top: 5px; width: auto; font-weight: normal;">Cambiar de usuario</button>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" id="tabGastos">💸 Gastos</div>
+            <div class="tab" id="tabLimpieza">🧹 Limpieza</div>
+        </div>
+
+        <!-- VISTA: GASTOS -->
+        <div id="vistaGastos" class="card">
+            <button id="btnMostrarFormGasto">+ Añadir Gasto</button>
+            <div id="formGasto" class="hidden" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd;">
+                <label>Concepto:</label>
+                <input type="text" id="conceptoGasto" placeholder="Ej. Compra Mercadona">
+                <label>Importe (€):</label>
+                <input type="number" id="importeGasto" placeholder="0.00" step="0.01" min="0">
+                <label>¿Quién ha pagado?</label>
+                <select id="pagadorGasto"></select>
+                <label>Dividir entre:</label>
+                <div id="involucradosGasto" class="checkbox-group"></div>
+                <button id="btnGuardarGasto">Guardar Gasto</button>
+                <button id="btnCancelarGasto" class="btn-secundario">Cancelar</button>
+            </div>
+
+            <div id="seccionBalances" style="margin-bottom: 25px;">
+                <h4 style="margin-top: 0;">Balances</h4>
+                <div id="listaBalances">Calculando...</div>
+                <div id="listaDeudas" style="margin-top: 15px;"></div>
+            </div>
+
+            <hr style="border: 0; border-top: 1px solid #ddd; margin-bottom: 15px;">
+
+            <div id="listaGastosContenedor">
+                <h4 style="margin-top: 0;">Historial de gastos</h4>
+                <div id="listaGastos">Cargando...</div>
+            </div>
+        </div>
+
+        <!-- VISTA: LIMPIEZA -->
+        <div id="vistaLimpieza" class="card hidden">
+            <button id="btnMostrarFormZona">+ Añadir Zona de Limpieza</button>
+            
+            <div id="formZona" class="hidden" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd;">
+                <label>Nombre de la zona:</label>
+                <input type="text" id="nombreZona" placeholder="Ej. Baño Principal, Cocina">
+                <label>¿Quién rota en esta zona?</label>
+                <div id="responsablesZona" class="checkbox-group"></div>
+                <button id="btnGuardarZona">Guardar Zona</button>
+                <button id="btnCancelarZona" class="btn-secundario">Cancelar</button>
+            </div>
+
+            <div id="listaLimpiezaContenedor" style="margin-top: 15px;">
+                <h4 style="margin-top: 0;">Tareas de esta semana</h4>
+                <p style="font-size: 0.85em; color: #666; margin-top: -10px; margin-bottom: 15px;">Las rotaciones cambian automáticamente cada lunes.</p>
+                <div id="listaLimpieza">Cargando...</div>
+            </div>
+        </div>
+
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
