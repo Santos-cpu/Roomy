@@ -48,6 +48,7 @@
         
         .hidden { display: none !important; }
         
+        /* Pestañas */
         .tabs { 
             display: flex; background: #2c2c2e; padding: 4px; border-radius: 10px; margin-bottom: 20px; 
             overflow-x: auto; white-space: nowrap; scrollbar-width: none; gap: 4px;
@@ -79,6 +80,12 @@
         
         hr { border: 0; border-top: 1px solid #3a3a3c; margin: 20px 0; }
         h2, h3, h4, h5 { margin-top: 0; }
+
+        /* Estilos de las tarjetas del Tablón */
+        .info-block { background: #1c1c1e; border-radius: 16px; padding: 20px; margin-bottom: 15px; text-align: center; border: 1px solid #2c2c2e; }
+        .info-label { color: #86868b; font-size: 0.85em; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px; }
+        .info-value { color: #f5f5f7; font-size: 1.2em; font-weight: 600; word-break: break-word; }
+        .info-sub { color: #0a84ff; font-family: monospace; font-size: 1.1em; margin-top: 5px; }
 
         /* MODAL IOS */
         #iosModalOverlay {
@@ -131,7 +138,6 @@
 
     <div id="pantallaDashboard" class="hidden">
         <div class="card" style="padding-bottom: 10px;">
-            <!-- CABECERA ACTUALIZADA (Con botón ℹ️ Tablón) -->
             <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
                 <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
                     <h3 id="tituloDashboard" style="margin: 0; font-size: 1.3em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px;">Piso</h3>
@@ -139,14 +145,16 @@
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <button id="btnCopiarEnlace" style="background: none; color: #0a84ff; padding: 6px 8px; border-radius: 8px; font-size: 0.85em; margin: 0; width: auto; font-weight: 600; border: 1px solid #3a3a3c;">🔗</button>
-                    <span id="nombreUsuarioActual" style="background: #2c2c2e; border: 1px solid #3a3a3c; padding: 6px 12px; border-radius: 12px; font-size: 0.85em; font-weight: 600;"></span>
+                    <!-- BOTÓN CAMBIAR USUARIO 🔄 -->
+                    <button id="btnCambiarUsuario" style="background: #2c2c2e; color: #f5f5f7; border: 1px solid #3a3a3c; padding: 6px 10px; border-radius: 10px; font-size: 0.85em; font-weight: 600; width: auto; margin: 0; display: flex; align-items: center; gap: 6px;">
+                        <span id="nombreUsuarioActual"></span><span style="font-size: 1.1em;">🔄</span>
+                    </button>
                     <button id="btnAbrirTablon" style="background: none; border: none; padding: 0; width: auto; font-size: 1.4em;">ℹ️</button>
                 </div>
             </div>
             <button id="btnVolverMenu" style="background: none; color: #86868b; font-size: 0.9em; text-align: left; padding: 0; margin-top: 18px; width: auto; font-weight: 500;">← Cambiar de piso</button>
         </div>
 
-        <!-- PESTAÑAS (Quedan 4 para entrar bien en móvil) -->
         <div id="contenedorPestañas" class="tabs">
             <div class="tab active" id="tabGastos">💸 Gastos</div>
             <div class="tab" id="tabCompra">🛒 Compra</div>
@@ -242,54 +250,53 @@
             <!-- VISTA: RANKING -->
             <div id="vistaRanking" class="card hidden">
                 <h4 style="margin-bottom: 5px;">Ranking del Piso 🏆</h4>
-                <p style="font-size: 0.85em; color: #86868b; margin-top: 0; margin-bottom: 20px;">Títulos calculados según la actividad económica.</p>
+                <p style="font-size: 0.85em; color: #86868b; margin-top: 0; margin-bottom: 20px;">Títulos únicos y dinámicos según las cuentas.</p>
                 <div id="contenidoRanking">Calculando ranking...</div>
             </div>
         </div>
 
         <!-- VISTA ESPECIAL: TABLÓN (Actúa por encima de las pestañas) -->
-        <div id="vistaTablon" class="card hidden" style="border: 2px solid #3a3a3c; box-shadow: 0 0 20px rgba(0,0,0,0.5);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <h4 style="margin: 0; font-size: 1.2em;">📋 Info del Piso</h4>
-                <button id="btnCerrarTablon" style="background: none; border: none; padding: 0; width: auto; font-size: 1.4em; color: #86868b;">✕</button>
+        <div id="vistaTablon" class="hidden" style="background: #000; position: absolute; top: 0; left: 0; width: 100%; min-height: 100%; z-index: 100; padding: 20px; box-sizing: border-box;">
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; padding-top: 10px;">
+                <h2 style="margin: 0; font-size: 1.5em; font-weight: 700;">📋 Info del Piso</h2>
+                <button id="btnCerrarTablon" style="background: #2c2c2e; color: #f5f5f7; border: none; padding: 8px 12px; border-radius: 12px; width: auto; margin: 0; font-weight: 600;">Cerrar</button>
             </div>
             
             <div id="tablonDisplay">
-                <div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
-                    <button id="btnEditarTablon" style="background: #2c2c2e; color: #f5f5f7; border: 1px solid #3a3a3c; padding: 6px 12px; border-radius: 8px; font-size: 0.85em; width: auto; margin: 0;">Editar Datos</button>
-                </div>
-                
-                <div class="item-lista" style="border-bottom: 1px solid #2c2c2e; flex-direction: column; align-items: flex-start;">
-                    <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
-                        <div class="item-info">
-                            <span class="item-titulo">Wi-Fi: <span id="displayWifiNombre" style="color:#0a84ff;">No configurado</span></span>
-                            <span class="item-detalle" style="font-family: monospace; font-size: 1.1em; color:#f5f5f7; margin-top:5px;" id="displayWifiPass">-</span>
-                        </div>
-                        <button id="btnCopiarWifi" style="background: #2c2c2e; color: #0a84ff; padding: 6px 12px; border-radius: 8px; font-size: 0.85em; margin: 0; width: auto; border: 1px solid #3a3a3c;">Copiar</button>
+                <!-- WI-FI CARD CENTRADA -->
+                <div class="info-block">
+                    <div class="info-label">Red Wi-Fi</div>
+                    <div id="displayWifiNombre" class="info-value" style="color: #0a84ff; font-size: 1.4em;">No configurado</div>
+                    <div id="displayWifiPass" class="info-sub">-</div>
+                    
+                    <div id="contenedorQR" class="hidden" style="margin-top: 20px; background: white; padding: 15px; border-radius: 16px; display: inline-block;">
+                        <img id="imgWifiQR" src="" style="width: 150px; height: 150px; display: block; margin: 0 auto;">
+                        <p style="color: #000; font-size: 0.8em; font-weight: 700; margin: 8px 0 0 0;">Escanea para conectar gratis</p>
                     </div>
                     
-                    <!-- CONTENEDOR CÓDIGO QR -->
-                    <div id="contenedorQR" class="hidden" style="width: 100%; margin-top: 15px; text-align: center; background: #ffffff; padding: 15px; border-radius: 12px; box-sizing: border-box;">
-                        <img id="imgWifiQR" src="" style="width: 160px; height: 160px; display: block; margin: 0 auto;">
-                        <p style="color: #000000; font-size: 0.85em; font-weight: 700; margin: 8px 0 0 0;">Escanea (o mantén pulsado en iOS) para conectar gratis</p>
-                    </div>
+                    <button id="btnCopiarWifi" class="btn-outline" style="margin-top: 20px; margin-bottom: 0; padding: 10px;">Copiar Contraseña</button>
                 </div>
 
-                <div class="item-lista" style="border-bottom: 1px solid #2c2c2e;">
-                    <div class="item-info">
-                        <span class="item-titulo">IBAN Alquiler</span>
-                        <span class="item-detalle" id="displayIban" style="font-family: monospace; font-size: 0.95em;">No configurado</span>
-                    </div>
-                    <button id="btnCopiarIban" style="background: #2c2c2e; color: #0a84ff; padding: 6px 12px; border-radius: 8px; font-size: 0.85em; margin: 0; width: auto; border: 1px solid #3a3a3c;">Copiar</button>
+                <!-- IBAN CARD -->
+                <div class="info-block">
+                    <div class="info-label">IBAN Alquiler / Casero</div>
+                    <div id="displayIban" class="info-value" style="font-family: monospace; letter-spacing: 1px;">No configurado</div>
+                    <button id="btnCopiarIban" class="btn-outline" style="margin-top: 15px; margin-bottom: 0; padding: 10px;">Copiar al Banco</button>
                 </div>
 
-                <div style="padding: 15px 0;">
-                    <h5 style="margin: 0 0 8px 0; color: #86868b;">Notas importantes:</h5>
-                    <p id="displayNotas" style="margin: 0; font-size: 0.9em; white-space: pre-wrap; line-height: 1.4; color: #f5f5f7;">Sin notas.</p>
+                <!-- NOTAS CARD -->
+                <div class="info-block" style="text-align: left;">
+                    <div class="info-label" style="text-align: center;">Notas Generales</div>
+                    <p id="displayNotas" style="margin: 0; font-size: 0.95em; white-space: pre-wrap; line-height: 1.5; color: #f5f5f7;">Sin notas.</p>
                 </div>
+                
+                <button id="btnEditarTablon" class="btn-secundario" style="margin-top: 10px;">Editar Datos del Tablón</button>
             </div>
 
-            <div id="tablonForm" class="hidden" style="background: #000; padding: 15px; border-radius: 12px; border: 1px solid #2c2c2e;">
+            <!-- FORMULARIO DE EDICIÓN DEL TABLÓN -->
+            <div id="tablonForm" class="hidden info-block" style="text-align: left;">
+                <h4 style="text-align: center; margin-bottom: 20px;">Editar Información</h4>
                 <label style="color: #86868b; font-size: 0.9em;">Nombre del Wi-Fi (SSID):</label>
                 <input type="text" id="inputWifiNombre" placeholder="Mi_Red_5G">
                 <label style="color: #86868b; font-size: 0.9em;">Contraseña Wi-Fi:</label>
@@ -297,8 +304,8 @@
                 <label style="color: #86868b; font-size: 0.9em;">IBAN del Casero / Piso:</label>
                 <input type="text" id="inputIban" placeholder="ESXX XXXX...">
                 <label style="color: #86868b; font-size: 0.9em;">Notas importantes:</label>
-                <textarea id="inputNotasTablon" rows="4" placeholder="Días de basura, reglas..."></textarea>
-                <div style="display: flex; gap: 10px;">
+                <textarea id="inputNotasTablon" rows="5" placeholder="Normas, días de basura..."></textarea>
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
                     <button id="btnGuardarTablon" style="flex: 2; margin-bottom: 0;">Guardar</button>
                     <button id="btnCancelarTablon" class="btn-secundario" style="flex: 1; margin-bottom: 0;">Cancelar</button>
                 </div>
