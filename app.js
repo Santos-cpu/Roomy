@@ -1,5 +1,4 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-// AÑADIDO: updateDoc y deleteDoc para modificar y borrar
 import { getFirestore, doc, setDoc, getDoc, collection, addDoc, getDocs, query, orderBy, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -20,10 +19,9 @@ let idPisoActual = "";
 let nombreUsuario = "";
 let nombresNuevos = []; 
 
-// Variables para controlar si estamos editando
 let idGastoEditando = null;
 let idZonaEditando = null;
-let zonaEditandoFechaBase = null; // Para no perder la rotación al editar
+let zonaEditandoFechaBase = null;
 
 let misPisos = JSON.parse(localStorage.getItem('misPisos_v2')) || [];
 
@@ -187,7 +185,7 @@ function resetFormGasto() {
     document.getElementById('importeGasto').value = '';
     document.getElementById('btnGuardarGasto').innerText = 'Guardar Gasto';
     document.getElementById('btnEliminarGasto').classList.add('hidden');
-    prepararFormularioGastos(); // Resetea checks y select
+    prepararFormularioGastos();
 }
 
 document.getElementById('btnMostrarFormGasto').addEventListener('click', () => {
@@ -214,17 +212,15 @@ function prepararFormularioGastos() {
     });
 }
 
-// Función para abrir form en modo Edición
 window.abrirEditarGasto = function(gastoObj) {
     idGastoEditando = gastoObj.id;
-    prepararFormularioGastos(); // Generar combos
+    prepararFormularioGastos();
     
     document.getElementById('tituloFormGasto').innerText = 'Editar Gasto';
     document.getElementById('conceptoGasto').value = gastoObj.concepto;
     document.getElementById('importeGasto').value = gastoObj.importe;
     document.getElementById('pagadorGasto').value = gastoObj.pagador;
     
-    // Marcar checks correspondientes
     const checkboxes = document.querySelectorAll('#involucradosGasto input[type="checkbox"]');
     checkboxes.forEach(cb => {
         cb.checked = gastoObj.involucrados.includes(cb.value);
@@ -238,25 +234,17 @@ window.abrirEditarGasto = function(gastoObj) {
     document.getElementById('formGasto').scrollIntoView({ behavior: 'smooth' });
 };
 
-// Eliminar Gasto
 document.getElementById('btnEliminarGasto').addEventListener('click', async () => {
     if (!confirm("¿Seguro que quieres eliminar este gasto? Esto recalculará las deudas.")) return;
-    
     const boton = document.getElementById('btnEliminarGasto');
     boton.innerText = "Borrando..."; boton.disabled = true;
-    
     try {
         await deleteDoc(doc(db, "grupos", idPisoActual, "gastos", idGastoEditando));
-        document.getElementById('btnCancelarGasto').click(); // Cierra formulario
+        document.getElementById('btnCancelarGasto').click();
         await cargarListaGastos();
-    } catch (error) { 
-        alert("Error al eliminar."); 
-    } finally { 
-        boton.innerText = "Eliminar"; boton.disabled = false; 
-    }
+    } catch (error) { alert("Error al eliminar."); } finally { boton.innerText = "Eliminar"; boton.disabled = false; }
 });
 
-// Guardar o Actualizar Gasto
 document.getElementById('btnGuardarGasto').addEventListener('click', async () => {
     const concepto = document.getElementById('conceptoGasto').value; 
     const importeStr = document.getElementById('importeGasto').value;
@@ -280,20 +268,14 @@ document.getElementById('btnGuardarGasto').addEventListener('click', async () =>
 
     try {
         if (idGastoEditando) {
-            // ACTUALIZAR
             await updateDoc(doc(db, "grupos", idPisoActual, "gastos", idGastoEditando), datosGasto);
         } else {
-            // CREAR NUEVO (añadimos fecha solo al crear)
             datosGasto.fecha = new Date().toISOString();
             await addDoc(collection(db, "grupos", idPisoActual, "gastos"), datosGasto);
         }
         document.getElementById('btnCancelarGasto').click(); 
         await cargarListaGastos();
-    } catch (error) { 
-        alert("Error al guardar."); 
-    } finally { 
-        boton.disabled = false; 
-    }
+    } catch (error) { alert("Error al guardar."); } finally { boton.disabled = false; }
 });
 
 async function cargarListaGastos() {
@@ -312,13 +294,12 @@ async function cargarListaGastos() {
         listaHtml.innerHTML = '';
         querySnapshot.forEach((docSnap) => {
             const gasto = docSnap.data(); 
-            gasto.id = docSnap.id; // ¡Importante guardar el ID!
+            gasto.id = docSnap.id;
             gastosTotales.push(gasto); 
             
             const divGasto = document.createElement('div'); 
             divGasto.className = 'item-lista';
             
-            // Construcción del HTML dinámico para inyectar el botón correctamente
             const divInfo = document.createElement('div');
             divInfo.className = 'item-info';
             divInfo.innerHTML = `<span class="item-titulo">${gasto.concepto}</span><span class="item-detalle">${gasto.pagador} pagó para ${gasto.involucrados.length} • ${new Date(gasto.fecha).toLocaleDateString('es-ES')}</span>`;
@@ -406,10 +387,9 @@ function prepararFormularioLimpieza() {
     });
 }
 
-// Abrir form de zona en edición
 window.abrirEditarZona = function(zonaObj) {
     idZonaEditando = zonaObj.id;
-    zonaEditandoFechaBase = zonaObj.fecha_base; // Conservamos la fecha para no romper la rotación
+    zonaEditandoFechaBase = zonaObj.fecha_base;
     prepararFormularioLimpieza();
     
     document.getElementById('tituloFormZona').innerText = 'Editar Zona';
@@ -428,7 +408,6 @@ window.abrirEditarZona = function(zonaObj) {
     document.getElementById('formZona').scrollIntoView({ behavior: 'smooth' });
 };
 
-// Eliminar Zona
 document.getElementById('btnEliminarZona').addEventListener('click', async () => {
     if (!confirm("¿Seguro que quieres eliminar esta zona de limpieza?")) return;
     const boton = document.getElementById('btnEliminarZona');
@@ -437,11 +416,7 @@ document.getElementById('btnEliminarZona').addEventListener('click', async () =>
         await deleteDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZonaEditando));
         document.getElementById('btnCancelarZona').click();
         await cargarListaLimpieza();
-    } catch (error) { 
-        alert("Error al eliminar."); 
-    } finally { 
-        boton.innerText = "Eliminar"; boton.disabled = false; 
-    }
+    } catch (error) { alert("Error al eliminar."); } finally { boton.innerText = "Eliminar"; boton.disabled = false; }
 });
 
 function obtenerLunes(fecha) {
@@ -451,7 +426,6 @@ function obtenerLunes(fecha) {
     return new Date(d.setDate(diff)).setHours(0,0,0,0);
 }
 
-// Guardar o Actualizar Zona
 document.getElementById('btnGuardarZona').addEventListener('click', async () => {
     const nombreZona = document.getElementById('nombreZona').value;
     const boton = document.getElementById('btnGuardarZona');
@@ -470,20 +444,14 @@ document.getElementById('btnGuardarZona').addEventListener('click', async () => 
 
     try {
         if (idZonaEditando) {
-            // Actualizar (Mantenemos la fecha base intacta en Firestore)
             await updateDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZonaEditando), datosZona);
         } else {
-            // Crear nueva
             datosZona.fecha_base = new Date(obtenerLunes(new Date())).toISOString();
             await addDoc(collection(db, "grupos", idPisoActual, "zonas_limpieza"), datosZona);
         }
         document.getElementById('btnCancelarZona').click(); 
         await cargarListaLimpieza();
-    } catch (error) { 
-        alert("Error al guardar."); 
-    } finally { 
-        boton.disabled = false; 
-    }
+    } catch (error) { alert("Error al guardar."); } finally { boton.disabled = false; }
 });
 
 async function cargarListaLimpieza() {
@@ -499,7 +467,7 @@ async function cargarListaLimpieza() {
         let zonas = [];
         querySnapshot.forEach((docSnap) => {
             const z = docSnap.data();
-            z.id = docSnap.id; // ¡Importante!
+            z.id = docSnap.id;
             zonas.push(z);
         });
         
@@ -507,14 +475,40 @@ async function cargarListaLimpieza() {
         listaHtml.innerHTML = '';
         const lunesActual = obtenerLunes(new Date());
 
-        zonas.forEach((zona, index) => {
+        // LÓGICA ANTI-COLISIONES DE LIMPIEZA
+        let asignadosEstaSemana = []; // Guardará quiénes ya tienen una tarea asignada esta semana
+
+        zonas.forEach((zona) => {
             const lunesBase = new Date(zona.fecha_base).getTime();
             let semanasTranscurridas = Math.floor((lunesActual - lunesBase) / 604800000);
             if (semanasTranscurridas < 0) semanasTranscurridas = 0;
 
-            const indiceLeToca = (semanasTranscurridas + index) % zona.responsables.length;
-            const leTocaA = zona.responsables[indiceLeToca];
+            const numResponsables = zona.responsables.length;
             
+            // Calculamos a quién le tocaría idealmente
+            let indiceIdeal = semanasTranscurridas % numResponsables;
+            let leTocaA = zona.responsables[indiceIdeal];
+            
+            let libreEncontrado = false;
+
+            // Recorremos la lista de la zona buscando a la primera persona que NO tenga tarea asignada
+            for (let i = 0; i < numResponsables; i++) {
+                let indicePrueba = (indiceIdeal + i) % numResponsables;
+                let candidato = zona.responsables[indicePrueba];
+                
+                if (!asignadosEstaSemana.includes(candidato)) {
+                    leTocaA = candidato;
+                    asignadosEstaSemana.push(candidato); // Lo marcamos como ocupado
+                    libreEncontrado = true;
+                    break;
+                }
+            }
+            
+            // Si todos estaban ocupados (ej. hay más tareas que personas), fallamos al ideal
+            if (!libreEncontrado) {
+                leTocaA = zona.responsables[indiceIdeal];
+            }
+
             const divZona = document.createElement('div');
             divZona.className = 'item-lista ' + (leTocaA === nombreUsuario ? 'mi-turno' : '');
             
