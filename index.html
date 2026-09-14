@@ -71,7 +71,6 @@
         <div id="contenedorNuevosNombres" style="margin-bottom: 20px;"></div>
         <button id="btnCrear">Crear Piso</button>
         <button id="btnCancelarCrear" class="btn-secundario hidden">Volver a mis pisos</button>
-        <div id="resultado" style="margin-top: 15px; font-size: 0.9em; word-wrap: break-word;"></div>
     </div>
 
     <div id="pantallaUnirse" class="card hidden">
@@ -82,10 +81,15 @@
 
     <div id="pantallaDashboard" class="hidden">
         <div class="card" style="padding-bottom: 5px;">
+            
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h3 id="tituloDashboard" style="margin: 0;">Piso</h3>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <h3 id="tituloDashboard" style="margin: 0;">Piso</h3>
+                    <button id="btnCopiarEnlace" style="background: none; color: #007bff; border: 1px solid #007bff; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; margin: 0; width: auto; font-weight: normal;">🔗 Copiar Enlace</button>
+                </div>
                 <span id="nombreUsuarioActual" style="background: #e9ecef; padding: 5px 10px; border-radius: 15px; font-size: 0.9em; font-weight: bold;"></span>
             </div>
+            
             <button id="btnVolverMenu" style="background: none; color: #6c757d; font-size: 0.9em; text-align: left; padding: 0; margin-top: 10px; width: auto; font-weight: bold;">← Volver al menú de pisos</button>
         </div>
 
@@ -146,16 +150,13 @@
             </div>
 
             <div id="listaLimpiezaContenedor" style="margin-top: 15px;">
-                <!-- CABECERA CON BOTÓN PARA VER CALENDARIO -->
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                     <h4 id="tituloSeccionLimpieza" style="margin: 0;">Tareas de esta semana</h4>
                     <button id="btnToggleCalendario" class="btn-outline" style="width: auto; padding: 6px 10px; margin: 0; font-size: 0.85em;">📅 Ver Mes</button>
                 </div>
                 
-                <!-- VISTA SEMANA ACTUAL -->
                 <div id="listaLimpieza">Cargando...</div>
 
-                <!-- VISTA CALENDARIO MENSUAL (Oculto por defecto) -->
                 <div id="calendarioMensual" class="hidden">
                     <div style="display: flex; justify-content: space-between; align-items: center; background: #e9ecef; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
                         <button id="btnMesAnterior" style="width: auto; margin: 0; padding: 5px 15px; background: none; color: #007bff; font-size: 1.2em;">◀</button>
