@@ -13,31 +13,144 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// Variables Globales
 let participantesGrupo = []; 
 let idPisoActual = "";
 let nombreUsuario = "";
+let nombresNuevos = []; 
 
+// Recuperamos el array de pisos guardados (o creamos uno vacío)
+let misPisos = JSON.parse(localStorage.getItem('misPisos_v2')) || [];
+
+// Referencias HTML
 const pantallaCrear = document.getElementById('pantallaCrear');
 const pantallaUnirse = document.getElementById('pantallaUnirse');
+const pantallaMisPisos = document.getElementById('pantallaMisPisos');
 const pantallaDashboard = document.getElementById('pantallaDashboard');
 
 async function iniciarApp() {
     const urlParams = new URLSearchParams(window.location.search);
     const pisoIdUrl = urlParams.get('id');
-    nombreUsuario = localStorage.getItem('usuarioActual');
-    idPisoActual = localStorage.getItem('pisoActual');
 
-    if (nombreUsuario && idPisoActual && (!pisoIdUrl || pisoIdUrl === idPisoActual)) {
-        await mostrarDashboard(nombreUsuario, idPisoActual);
-        return;
-    }
+    // Si entra por un enlace de invitación
     if (pisoIdUrl) {
+        document.body.classList.add('pantalla-centrada');
         pantallaUnirse.classList.remove('hidden');
         await cargarPantallaUnirse(pisoIdUrl);
         return;
     }
-    pantallaCrear.classList.remove('hidden');
+
+    // Si no hay enlace, miramos si ya tiene pisos guardados
+    if (misPisos.length > 0) {
+        document.body.classList.add('pantalla-centrada');
+        mostrarPantallaMisPisos();
+    } else {
+        document.body.classList.add('pantalla-centrada');
+        pantallaCrear.classList.remove('hidden');
+    }
 }
+
+// --- PANTALLAS DE INICIO (MIS PISOS / CREAR) ---
+
+function mostrarPantallaMisPisos() {
+    pantallaMisPisos.classList.remove('hidden');
+    pantallaCrear.classList.add('hidden');
+    document.getElementById('btnCancelarCrear').classList.remove('hidden');
+    
+    const div = document.getElementById('listaMisPisos');
+    div.innerHTML = '';
+    
+    misPisos.forEach(piso => {
+        const btn = document.createElement('button');
+        btn.className = 'btn-name';
+        btn.innerHTML = `${piso.nombrePiso} <br><small style="font-weight:normal; font-size:0.85em;">Entrar como ${piso.nombreUsuario}</small>`;
+        btn.onclick = () => {
+            document.body.classList.remove('pantalla-centrada');
+            pantallaMisPisos.classList.add('hidden');
+            nombreUsuario = piso.nombreUsuario;
+            idPisoActual = piso.id;
+            mostrarDashboard(piso.nombreUsuario, piso.id);
+        };
+        div.appendChild(btn);
+    });
+}
+
+document.getElementById('btnIrCrearPiso').addEventListener('click', () => {
+    pantallaMisPisos.classList.add('hidden');
+    pantallaCrear.classList.remove('hidden');
+});
+
+document.getElementById('btnCancelarCrear').addEventListener('click', () => {
+    pantallaCrear.classList.add('hidden');
+    pantallaMisPisos.classList.remove('hidden');
+});
+
+// Lógica para añadir nombres dinámicamente uno a uno
+document.getElementById('btnAñadirNombre').addEventListener('click', () => {
+    const input = document.getElementById('inputNuevoNombre');
+    const nombre = input.value.trim();
+    if (nombre && !nombresNuevos.includes(nombre)) {
+        nombresNuevos.push(nombre);
+        actualizarListaNuevosNombres();
+        input.value = '';
+    }
+});
+
+function actualizarListaNuevosNombres() {
+    const contenedor = document.getElementById('contenedorNuevosNombres');
+    contenedor.innerHTML = '';
+    nombresNuevos.forEach((nombre, index) => {
+        contenedor.innerHTML += `
+            <div class="tag-nombre">
+                <span>👤 ${nombre}</span>
+                <span class="tag-eliminar" onclick="quitarNombre(${index})">✕</span>
+            </div>
+        `;
+    });
+}
+
+window.quitarNombre = function(index) {
+    nombresNuevos.splice(index, 1);
+    actualizarListaNuevosNombres();
+};
+
+document.getElementById('btnCrear').addEventListener('click', async () => {
+    const nombrePiso = document.getElementById('nombrePiso').value;
+    const boton = document.getElementById('btnCrear');
+    
+    if (!nombrePiso || nombresNuevos.length === 0) { 
+        alert("Escribe el nombre del piso y añade al menos a un inquilino."); 
+        return; 
+    }
+    
+    boton.innerText = "Creando..."; boton.disabled = true;
+    const idUnico = 'piso-' + Math.random().toString(36).substring(2, 8);
+    
+    try {
+        await setDoc(doc(db, "grupos", idUnico), {
+            id: idUnico,
+            nombre_piso: nombrePiso,
+            creador: nombresNuevos[0],
+            participantes: nombresNuevos,
+            fecha_creacion: new Date().toISOString()
+        });
+        const enlaceLocal = `${window.location.origin}${window.location.pathname}?id=${idUnico}`;
+        document.getElementById('resultado').innerHTML = `
+            <span style="color: green; font-weight: bold;">¡Piso creado!</span><br><br>
+            Copia este enlace o pincha para entrar:<br>
+            <a href="${enlaceLocal}"><b>${enlaceLocal}</b></a>
+        `;
+        document.getElementById('nombrePiso').value = ""; 
+        nombresNuevos = [];
+        actualizarListaNuevosNombres();
+    } catch (error) { 
+        alert("Error al guardar."); 
+    } finally { 
+        boton.innerText = "Crear Piso"; boton.disabled = false; 
+    }
+});
+
+// --- UNIRSE A PISO ---
 
 async function cargarPantallaUnirse(id) {
     try {
@@ -48,18 +161,12 @@ async function cargarPantallaUnirse(id) {
             document.getElementById('tituloUnirse').innerText = `🏡 ${datosPiso.nombre_piso}`;
             const listaNombres = document.getElementById('listaNombres');
             listaNombres.innerHTML = ''; 
+            
             datosPiso.participantes.forEach(nombre => {
                 const btn = document.createElement('button');
                 btn.innerText = nombre;
                 btn.className = 'btn-name';
-                btn.onclick = () => {
-                    localStorage.setItem('usuarioActual', nombre);
-                    localStorage.setItem('pisoActual', id);
-                    nombreUsuario = nombre;
-                    idPisoActual = id;
-                    pantallaUnirse.classList.add('hidden');
-                    mostrarDashboard(nombre, id);
-                };
+                btn.onclick = () => unirseYGuardar(nombre, id, datosPiso.nombre_piso);
                 listaNombres.appendChild(btn);
             });
         } else {
@@ -69,6 +176,26 @@ async function cargarPantallaUnirse(id) {
         document.getElementById('tituloUnirse').innerText = "Error de conexión";
     }
 }
+
+function unirseYGuardar(nombre, id, nombrePiso) {
+    // Evitar duplicados en localStorage si entras al mismo piso
+    misPisos = misPisos.filter(piso => piso.id !== id);
+    misPisos.push({ id: id, nombrePiso: nombrePiso, nombreUsuario: nombre });
+    localStorage.setItem('misPisos_v2', JSON.stringify(misPisos));
+    
+    nombreUsuario = nombre;
+    idPisoActual = id;
+    
+    pantallaUnirse.classList.add('hidden');
+    document.body.classList.remove('pantalla-centrada');
+    
+    // Limpiamos la URL para que quede limpia arriba
+    window.history.pushState({}, document.title, window.location.pathname);
+    
+    mostrarDashboard(nombre, id);
+}
+
+// --- DASHBOARD ---
 
 async function mostrarDashboard(nombre, id) {
     pantallaDashboard.classList.remove('hidden');
@@ -86,29 +213,6 @@ async function mostrarDashboard(nombre, id) {
         await cargarListaLimpieza();
     }
 }
-
-// CREAR PISO
-document.getElementById('btnCrear').addEventListener('click', async () => {
-    const nombrePiso = document.getElementById('nombrePiso').value;
-    const nombresInput = document.getElementById('nombresInquilinos').value;
-    const boton = document.getElementById('btnCrear');
-    if (!nombrePiso || !nombresInput) { alert("Rellena todos los campos."); return; }
-    boton.innerText = "Creando..."; boton.disabled = true;
-    const participantes = nombresInput.split(',').map(n => n.trim()).filter(n => n !== "");
-    const idUnico = 'piso-' + Math.random().toString(36).substring(2, 8);
-    try {
-        await setDoc(doc(db, "grupos", idUnico), {
-            id: idUnico,
-            nombre_piso: nombrePiso,
-            creador: participantes[0],
-            participantes: participantes,
-            fecha_creacion: new Date().toISOString()
-        });
-        const enlaceLocal = `${window.location.origin}${window.location.pathname}?id=${idUnico}`;
-        document.getElementById('resultado').innerHTML = `<span style="color: green; font-weight: bold;">¡Piso creado!</span><br><br>Pincha en este enlace para entrar:<br><a href="${enlaceLocal}"><b>${enlaceLocal}</b></a>`;
-        document.getElementById('nombrePiso').value = ""; document.getElementById('nombresInquilinos').value = "";
-    } catch (error) { alert("Error al guardar."); } finally { boton.innerText = "Crear Piso"; boton.disabled = false; }
-});
 
 // PESTAÑAS
 document.getElementById('tabGastos').addEventListener('click', () => {
@@ -262,20 +366,32 @@ async function cargarListaLimpieza() {
     try {
         const q = query(collection(db, "grupos", idPisoActual, "zonas_limpieza"));
         const querySnapshot = await getDocs(q);
+        
         if (querySnapshot.empty) {
             listaHtml.innerHTML = '<p style="color:#666; text-align:center;">Aún no hay zonas de limpieza creadas.</p>'; return;
         }
+
+        // Descargamos las zonas en un Array para poder ordenarlas
+        let zonas = [];
+        querySnapshot.forEach((docSnap) => zonas.push(docSnap.data()));
+        
+        // ORDENAMOS ALFABÉTICAMENTE. Esto es vital para aplicar un desfase constante.
+        zonas.sort((a, b) => a.nombre_zona.localeCompare(b.nombre_zona));
+
         listaHtml.innerHTML = '';
         const lunesActual = obtenerLunes(new Date());
 
-        querySnapshot.forEach((docSnap) => {
-            const zona = docSnap.data();
+        zonas.forEach((zona, index) => {
             const lunesBase = new Date(zona.fecha_base).getTime();
             let semanasTranscurridas = Math.floor((lunesActual - lunesBase) / 604800000);
             if (semanasTranscurridas < 0) semanasTranscurridas = 0;
 
-            const indiceLeToca = semanasTranscurridas % zona.responsables.length;
+            // EL DESFASE: Sumamos el index de la zona a las semanas transcurridas.
+            // Así garantizamos que si Diego, Ana y Carlos están en 3 zonas, 
+            // no caigan en el índice 0 los tres a la vez la misma semana.
+            const indiceLeToca = (semanasTranscurridas + index) % zona.responsables.length;
             const leTocaA = zona.responsables[indiceLeToca];
+            
             const divZona = document.createElement('div');
             divZona.className = 'item-lista ' + (leTocaA === nombreUsuario ? 'mi-turno' : '');
             const rotacionVisual = zona.responsables.join(' ➔ ');
@@ -294,17 +410,16 @@ async function cargarListaLimpieza() {
     } catch (error) { console.error(error); listaHtml.innerHTML = 'Error al cargar las tareas.'; }
 }
 
-// SALIR
-document.getElementById('btnSalir').addEventListener('click', () => {
-    localStorage.removeItem('usuarioActual'); localStorage.removeItem('pisoActual'); window.location.href = window.location.pathname; 
+// VOLVER AL MENÚ
+document.getElementById('btnVolverMenu').addEventListener('click', () => {
+    // Simplemente recargamos la página limpia sin parámetros en la URL
+    window.location.href = window.location.pathname; 
 });
 
-// 15. Registrar Service Worker para PWA
+// Registrar Service Worker para PWA
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
-            .then(reg => console.log('Service Worker registrado con éxito: ', reg.scope))
-            .catch(err => console.log('Fallo al registrar el Service Worker: ', err));
+        navigator.serviceWorker.register('./sw.js').catch(err => console.log('Fallo SW: ', err));
     });
 }
 
