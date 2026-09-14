@@ -13,7 +13,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Variables Globales
 let participantesGrupo = []; 
 let idPisoActual = "";
 let nombreUsuario = "";
@@ -26,7 +25,6 @@ let zonaEditandoFechaBase = null;
 let zonasLimpiezaCache = []; 
 let fechaCalendario = new Date(); 
 
-// Variables de Sesión (NUEVO CONTROL DE AUTO-LOGIN)
 let misPisos = JSON.parse(localStorage.getItem('misPisos_v2')) || [];
 let ultimoPisoActivo = localStorage.getItem('ultimoPisoActivo');
 
@@ -39,7 +37,6 @@ async function iniciarApp() {
     const urlParams = new URLSearchParams(window.location.search);
     const pisoIdUrl = urlParams.get('id');
 
-    // 1. Si entra por un enlace de invitación nuevo
     if (pisoIdUrl) {
         document.body.classList.add('pantalla-centrada');
         pantallaUnirse.classList.remove('hidden');
@@ -47,7 +44,6 @@ async function iniciarApp() {
         return;
     }
 
-    // 2. Si ya estaba en un piso activo, entra directo (Auto-login)
     if (ultimoPisoActivo) {
         const pisoGuardado = misPisos.find(p => p.id === ultimoPisoActivo);
         if (pisoGuardado) {
@@ -59,18 +55,15 @@ async function iniciarApp() {
         }
     }
 
-    // 3. Si tiene pisos guardados pero cerró sesión, muestra menú
     if (misPisos.length > 0) {
         document.body.classList.add('pantalla-centrada');
         mostrarPantallaMisPisos();
     } else {
-        // 4. Usuario completamente nuevo
         document.body.classList.add('pantalla-centrada');
         pantallaCrear.classList.remove('hidden');
     }
 }
 
-// --- PANTALLAS INICIO ---
 function mostrarPantallaMisPisos() {
     pantallaMisPisos.classList.remove('hidden');
     pantallaCrear.classList.add('hidden');
@@ -82,14 +75,11 @@ function mostrarPantallaMisPisos() {
     misPisos.forEach(piso => {
         const btn = document.createElement('button');
         btn.className = 'btn-name';
-        btn.innerHTML = `${piso.nombrePiso} <br><small style="font-weight:normal; font-size:0.85em;">Entrar como ${piso.nombreUsuario}</small>`;
+        btn.innerHTML = `${piso.nombrePiso} <br><small style="font-weight:normal; font-size:0.85em; color:#86868b;">Entrar como ${piso.nombreUsuario}</small>`;
         btn.onclick = () => {
             document.body.classList.remove('pantalla-centrada');
             pantallaMisPisos.classList.add('hidden');
-            
-            // Guardamos el último piso activo para la próxima vez
             localStorage.setItem('ultimoPisoActivo', piso.id);
-            
             nombreUsuario = piso.nombreUsuario;
             idPisoActual = piso.id;
             mostrarDashboard(piso.nombreUsuario, piso.id);
@@ -108,6 +98,7 @@ document.getElementById('btnAñadirNombre').addEventListener('click', () => {
         nombresNuevos.push(nombre); actualizarListaNuevosNombres(); input.value = '';
     }
 });
+
 function actualizarListaNuevosNombres() {
     const contenedor = document.getElementById('contenedorNuevosNombres');
     contenedor.innerHTML = '';
@@ -130,13 +121,11 @@ document.getElementById('btnCrear').addEventListener('click', async () => {
             participantes: nombresNuevos, fecha_creacion: new Date().toISOString()
         });
         
-        // Transición automática al flujo de Unirse sin tener que pinchar el enlace
         pantallaCrear.classList.add('hidden');
         pantallaUnirse.classList.remove('hidden');
         document.getElementById('nombrePiso').value = ""; nombresNuevos = []; actualizarListaNuevosNombres();
         
         await cargarPantallaUnirse(idUnico);
-        
     } catch (error) { alert("Error al guardar."); } finally { boton.innerText = "Crear Piso"; boton.disabled = false; }
 });
 
@@ -161,11 +150,8 @@ async function cargarPantallaUnirse(id) {
 function unirseYGuardar(nombre, id, nombrePiso) {
     misPisos = misPisos.filter(piso => piso.id !== id);
     misPisos.push({ id: id, nombrePiso: nombrePiso, nombreUsuario: nombre });
-    
-    // Guardamos en LocalStorage
     localStorage.setItem('misPisos_v2', JSON.stringify(misPisos));
     localStorage.setItem('ultimoPisoActivo', id);
-    
     nombreUsuario = nombre; idPisoActual = id;
     pantallaUnirse.classList.add('hidden'); document.body.classList.remove('pantalla-centrada');
     window.history.pushState({}, document.title, window.location.pathname);
@@ -187,17 +173,13 @@ async function mostrarDashboard(nombre, id) {
     }
 }
 
-// BOTÓN COPIAR ENLACE
 document.getElementById('btnCopiarEnlace').addEventListener('click', () => {
     const enlace = `${window.location.origin}${window.location.pathname}?id=${idPisoActual}`;
     navigator.clipboard.writeText(enlace).then(() => {
-        alert("Enlace copiado al portapapeles. ¡Pásalo por WhatsApp!");
-    }).catch(err => {
-        alert("Tu navegador no permite copiar automáticamente. Copia este enlace manualemente:\n\n" + enlace);
-    });
+        alert("Enlace copiado. ¡Pásalo por WhatsApp!");
+    }).catch(err => { alert("Copia este enlace: \n" + enlace); });
 });
 
-// PESTAÑAS
 document.getElementById('tabGastos').addEventListener('click', () => {
     document.getElementById('tabGastos').classList.add('active'); document.getElementById('tabLimpieza').classList.remove('active');
     document.getElementById('vistaGastos').classList.remove('hidden'); document.getElementById('vistaLimpieza').classList.add('hidden');
@@ -275,15 +257,23 @@ async function cargarListaGastos() {
         const querySnapshot = await getDocs(q);
         let gastosTotales = [];
         if (querySnapshot.empty) {
-            listaHtml.innerHTML = '<p style="color:#666; text-align:center;">No hay gastos todavía.</p>';
-            document.getElementById('listaBalances').innerHTML = '<p style="color:#666;">Sin actividad</p>';
+            listaHtml.innerHTML = '<p style="color:#86868b; text-align:center;">No hay gastos todavía.</p>';
+            document.getElementById('listaBalances').innerHTML = '<p style="color:#86868b;">Sin actividad</p>';
             document.getElementById('listaDeudas').innerHTML = ''; return;
         }
         listaHtml.innerHTML = '';
         querySnapshot.forEach((docSnap) => {
             const gasto = docSnap.data(); gasto.id = docSnap.id; gastosTotales.push(gasto); 
             const divGasto = document.createElement('div'); divGasto.className = 'item-lista';
-            divGasto.innerHTML = `<div class="item-info"><span class="item-titulo">${gasto.concepto}</span><span class="item-detalle">${gasto.pagador} pagó para ${gasto.involucrados.length} • ${new Date(gasto.fecha).toLocaleDateString('es-ES')}</span></div><div style="display: flex; align-items: center; gap: 10px;"><span class="gasto-importe">${gasto.importe.toFixed(2)}€</span><button style="background:none; border:none; padding:0; cursor:pointer; font-size:1.4em; margin:0;" onclick='window.abrirEditarGasto(${JSON.stringify(gasto).replace(/'/g, "\\'")})'>✏️</button></div>`;
+            divGasto.innerHTML = `
+                <div class="item-info">
+                    <span class="item-titulo">${gasto.concepto}</span>
+                    <span class="item-detalle">${gasto.pagador} pagó para ${gasto.involucrados.length} • ${new Date(gasto.fecha).toLocaleDateString('es-ES')}</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span class="gasto-importe">${gasto.importe.toFixed(2)}€</span>
+                    <button style="background:none; border:none; padding:0; cursor:pointer; font-size:1.4em; margin:0;" onclick='window.abrirEditarGasto(${JSON.stringify(gasto).replace(/'/g, "\\'")})'>✏️</button>
+                </div>`;
             listaHtml.appendChild(divGasto);
         });
         calcularBalancesYDeudas(gastosTotales);
@@ -299,7 +289,8 @@ function calcularBalancesYDeudas(gastos) {
     });
     let htmlBalances = ''; let deudores = []; let acreedores = [];
     for (let persona in balances) {
-        let saldo = balances[persona]; let color = saldo >= -0.01 && saldo <= 0.01 ? 'black' : (saldo > 0 ? 'green' : 'red');
+        let saldo = balances[persona]; 
+        let color = saldo >= -0.01 && saldo <= 0.01 ? '#f5f5f7' : (saldo > 0 ? '#32d74b' : '#ff453a');
         htmlBalances += `<div class="balance-item"><span>${persona}</span><span style="color: ${color}; font-weight: bold;">${saldo.toFixed(2)}€</span></div>`;
         if (saldo < -0.01) deudores.push({ nombre: persona, cantidad: Math.abs(saldo) });
         if (saldo > 0.01) acreedores.push({ nombre: persona, cantidad: saldo });
@@ -307,12 +298,12 @@ function calcularBalancesYDeudas(gastos) {
     document.getElementById('listaBalances').innerHTML = htmlBalances;
     deudores.sort((a, b) => b.cantidad - a.cantidad); acreedores.sort((a, b) => b.cantidad - a.cantidad);
     let htmlDeudas = ''; let i = 0; let j = 0;
-    if (deudores.length === 0) { htmlDeudas = '<p style="color:green; font-weight:bold;">✅ Cuentas saldadas</p>'; } else {
-        htmlDeudas = '<h5 style="margin: 0 0 10px 0;">Cómo saldar deudas:</h5>';
+    if (deudores.length === 0) { htmlDeudas = '<p style="color:#32d74b; font-weight:bold;">✅ Cuentas saldadas</p>'; } else {
+        htmlDeudas = '<h5 style="margin: 0 0 10px 0; color:#86868b;">Cómo saldar deudas:</h5>';
         while (i < deudores.length && j < acreedores.length) {
             let deudor = deudores[i]; let acreedor = acreedores[j];
             let cantidadATransferir = Math.min(deudor.cantidad, acreedor.cantidad);
-            htmlDeudas += `<div class="deuda-item">💸 <b>${deudor.nombre}</b> debe pagar <b>${cantidadATransferir.toFixed(2)}€</b> a <b>${acreedor.nombre}</b></div>`;
+            htmlDeudas += `<div class="deuda-item">💸 <b style="color:#f5f5f7;">${deudor.nombre}</b> debe pagar <b style="color:#0a84ff;">${cantidadATransferir.toFixed(2)}€</b> a <b style="color:#f5f5f7;">${acreedor.nombre}</b></div>`;
             deudor.cantidad -= cantidadATransferir; acreedor.cantidad -= cantidadATransferir;
             if (deudor.cantidad < 0.01) i++; if (acreedor.cantidad < 0.01) j++;
         }
@@ -394,7 +385,6 @@ async function cargarListaLimpieza() {
 
         renderVistaSemanaActual();
         renderCalendarioMensual();
-
     } catch (error) { console.error(error); listaHtml.innerHTML = 'Error al cargar las tareas.'; }
 }
 
@@ -423,24 +413,17 @@ function calcularAsignacionesParaSemana(fechaLunes) {
                 break;
             }
         }
-        
         if (!libreEncontrado) leTocaA = zona.responsables[indiceIdeal];
 
-        asignaciones.push({
-            idZona: zona.id,
-            nombre_zona: zona.nombre_zona,
-            responsables: zona.responsables,
-            leTocaA: leTocaA
-        });
+        asignaciones.push({ idZona: zona.id, nombre_zona: zona.nombre_zona, responsables: zona.responsables, leTocaA: leTocaA });
     });
-
     return asignaciones;
 }
 
 function renderVistaSemanaActual() {
     const listaHtml = document.getElementById('listaLimpieza');
     if (zonasLimpiezaCache.length === 0) {
-        listaHtml.innerHTML = '<p style="color:#666; text-align:center;">Aún no hay zonas creadas.</p>'; return;
+        listaHtml.innerHTML = '<p style="color:#86868b; text-align:center;">Aún no hay zonas creadas.</p>'; return;
     }
 
     const lunesActual = new Date(obtenerLunes(new Date()));
@@ -458,7 +441,7 @@ function renderVistaSemanaActual() {
                 <span class="item-detalle">Rotación: ${rotacionVisual}</span>
             </div>
             <div style="display: flex; align-items: center; gap: 15px;">
-                <div style="font-weight: bold; font-size: 1.1em; color: ${asig.leTocaA === nombreUsuario ? '#155724' : '#333'}">${asig.leTocaA === nombreUsuario ? '¡Te toca!' : asig.leTocaA}</div>
+                <div style="font-weight: 600; font-size: 1.1em; color: ${asig.leTocaA === nombreUsuario ? '#32d74b' : '#f5f5f7'}">${asig.leTocaA === nombreUsuario ? '¡Te toca!' : asig.leTocaA}</div>
                 <button style="background:none; border:none; padding:0; cursor:pointer; font-size:1.4em; margin:0;" onclick='window.abrirEditarZona("${asig.idZona}")'>✏️</button>
             </div>
         `;
@@ -469,7 +452,7 @@ function renderVistaSemanaActual() {
 function renderCalendarioMensual() {
     const contenedor = document.getElementById('contenedorSemanasMes');
     if (zonasLimpiezaCache.length === 0) {
-        contenedor.innerHTML = '<p style="color:#666; text-align:center;">Aún no hay zonas creadas.</p>'; return;
+        contenedor.innerHTML = '<p style="color:#86868b; text-align:center;">Aún no hay zonas creadas.</p>'; return;
     }
 
     const mes = fechaCalendario.getMonth();
@@ -497,19 +480,19 @@ function renderCalendarioMensual() {
         let textoFechas = `Del ${lunesSemana.getDate()} ${nombresMeses[lunesSemana.getMonth()].substring(0,3)} al ${domingoSemana.getDate()} ${nombresMeses[domingoSemana.getMonth()].substring(0,3)}`;
         
         const esSemanaActual = lunesSemana.getTime() === lunesActualHoy;
-        const badge = esSemanaActual ? `<span style="background: #28a745; color: white; padding: 2px 6px; border-radius: 10px; font-size: 0.7em; margin-left: 5px; vertical-align: middle;">Actual</span>` : '';
+        const badge = esSemanaActual ? `<span style="background: #32d74b; color: #000; padding: 2px 6px; border-radius: 10px; font-size: 0.7em; margin-left: 5px; vertical-align: middle; font-weight: bold;">Actual</span>` : '';
 
         const divSemana = document.createElement('div');
-        divSemana.style.cssText = `background: white; border: ${esSemanaActual ? '2px solid #28a745' : '1px solid #ddd'}; border-radius: 8px; padding: 12px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);`;
+        divSemana.style.cssText = `background: #1c1c1e; border: ${esSemanaActual ? '2px solid #32d74b' : '1px solid #2c2c2e'}; border-radius: 12px; padding: 14px; margin-bottom: 15px;`;
 
-        let htmlSemana = `<h5 style="margin: 0 0 10px 0; color: #007bff; border-bottom: 1px solid #eee; padding-bottom: 8px;">📅 ${textoFechas} ${badge}</h5>`;
+        let htmlSemana = `<h5 style="margin: 0 0 12px 0; color: #0a84ff; border-bottom: 1px solid #2c2c2e; padding-bottom: 8px; font-size:1em;">📅 ${textoFechas} ${badge}</h5>`;
 
         asignaciones.forEach(asig => {
             const esMiTurno = asig.leTocaA === nombreUsuario;
             htmlSemana += `
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 0.95em; ${esMiTurno ? 'background: #d4edda; padding: 4px 8px; border-radius: 4px; border-left: 3px solid #28a745;' : 'padding: 4px 8px;'}">
-                    <span style="font-weight: bold; color: #444;">${asig.nombre_zona}</span>
-                    <span style="color: ${esMiTurno ? '#155724' : '#555'}; font-weight: ${esMiTurno ? 'bold' : 'normal'};">${esMiTurno ? '¡Te toca!' : asig.leTocaA}</span>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 0.95em; ${esMiTurno ? 'background: rgba(50, 215, 75, 0.15); padding: 6px 10px; border-radius: 8px; border-left: 3px solid #32d74b;' : 'padding: 6px 10px;'}">
+                    <span style="font-weight: 600; color: #f5f5f7;">${asig.nombre_zona}</span>
+                    <span style="color: ${esMiTurno ? '#32d74b' : '#86868b'}; font-weight: ${esMiTurno ? 'bold' : 'normal'};">${esMiTurno ? '¡Te toca!' : asig.leTocaA}</span>
                 </div>
             `;
         });
@@ -530,7 +513,7 @@ document.getElementById('btnToggleCalendario').addEventListener('click', () => {
         btn.innerText = "Ver Semana Actual"; titulo.innerText = "Calendario Mensual";
     } else {
         vistaCalendario.classList.add('hidden'); vistaSemana.classList.remove('hidden');
-        btn.innerText = "📅 Ver Mes"; titulo.innerText = "Tareas de esta semana";
+        btn.innerText = "📅 Ver Mes"; titulo.innerText = "Tareas de la semana";
     }
 });
 
@@ -538,7 +521,6 @@ document.getElementById('btnMesAnterior').addEventListener('click', () => { fech
 document.getElementById('btnMesSiguiente').addEventListener('click', () => { fechaCalendario = new Date(fechaCalendario.getFullYear(), fechaCalendario.getMonth() + 1, 1); renderCalendarioMensual(); });
 
 document.getElementById('btnVolverMenu').addEventListener('click', () => { 
-    // Borramos el último piso activo para que pare en el menú
     localStorage.removeItem('ultimoPisoActivo');
     window.location.href = window.location.pathname; 
 });
