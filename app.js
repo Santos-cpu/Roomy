@@ -186,15 +186,19 @@ async function mostrarDashboard(nombre, id) {
     }
 }
 
+// CAMBIAR DE USUARIO (Corregido para no borrar el piso de la lista)
 document.getElementById('btnCambiarUsuario').addEventListener('click', async () => {
-    const seguro = await window.mostrarConfirmacion("Cambiar de perfil", "¿Te has equivocado de nombre? Volverás a la pantalla de selección.");
+    const seguro = await window.mostrarConfirmacion("Cambiar de perfil", "¿Te has equivocado de nombre? Volverás a la selección de nombres.");
     if (seguro) {
         if(unsubGastos) unsubGastos(); if(unsubCompra) unsubCompra(); if(unsubLimpieza) unsubLimpieza();
-        misPisos = misPisos.filter(p => p.id !== idPisoActual);
-        localStorage.setItem('misPisos_v2', JSON.stringify(misPisos));
+        
+        // NO borramos el piso de misPisos, solo quitamos el activo temporalmente
         localStorage.removeItem('ultimoPisoActivo');
-        document.getElementById('pantallaDashboard').classList.add('hidden'); document.body.classList.add('pantalla-centrada');
-        document.getElementById('pantallaUnirse').classList.remove('hidden'); await cargarPantallaUnirse(idPisoActual);
+        
+        document.getElementById('pantallaDashboard').classList.add('hidden');
+        document.body.classList.add('pantalla-centrada');
+        document.getElementById('pantallaUnirse').classList.remove('hidden');
+        await cargarPantallaUnirse(idPisoActual);
     }
 });
 
