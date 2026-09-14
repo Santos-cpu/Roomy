@@ -12,11 +12,9 @@
 
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; max-width: 400px; margin: 0 auto; background-color: #f4f4f9; }
-        
-        /* Clase para centrar pantallas de inicio */
         .pantalla-centrada { display: flex; flex-direction: column; justify-content: center; min-height: 90vh; }
-        
         .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        
         input, button, select { width: 100%; margin-bottom: 15px; padding: 12px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
         button { background-color: #007bff; color: white; border: none; font-weight: bold; cursor: pointer; }
         button:hover { background-color: #0056b3; }
@@ -29,16 +27,16 @@
         .btn-outline:hover { background-color: #007bff; color: white; }
         .hidden { display: none !important; }
         
-        /* Estilos Pestañas */
+        /* Pestañas */
         .tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid #ddd; }
         .tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; color: #666; font-weight: bold; }
         .tab.active { border-bottom: 3px solid #007bff; color: #007bff; }
         
-        /* Listas y Elementos */
+        /* Listas */
         .item-lista { border-bottom: 1px solid #eee; padding: 12px 0; display: flex; justify-content: space-between; align-items: center; }
-        .item-info { display: flex; flex-direction: column; }
-        .item-titulo { font-weight: bold; font-size: 1.05em; }
-        .item-detalle { font-size: 0.85em; color: #666; margin-top: 3px; }
+        .item-info { display: flex; flex-direction: column; flex: 1; padding-right: 10px; }
+        .item-titulo { font-weight: bold; font-size: 1.05em; word-break: break-word; }
+        .item-detalle { font-size: 0.85em; color: #666; margin-top: 3px; line-height: 1.3; }
         .gasto-importe { font-weight: bold; color: #dc3545; font-size: 1.1em; }
         
         .checkbox-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 15px; }
@@ -47,7 +45,6 @@
         
         .balance-item { display: flex; justify-content: space-between; border-bottom: 1px solid #f0f0f0; padding: 8px 0; }
         .deuda-item { background: #e9ecef; padding: 10px; border-radius: 6px; margin-bottom: 5px; font-size: 0.9em; }
-        
         .mi-turno { background-color: #d4edda; padding: 10px; border-radius: 8px; border-left: 5px solid #28a745; margin-bottom: 5px; }
         .tag-nombre { display: flex; justify-content: space-between; align-items: center; background: #e9ecef; padding: 8px 12px; border-radius: 6px; margin-bottom: 8px; font-weight: bold; }
         .tag-eliminar { color: #dc3545; cursor: pointer; font-weight: bold; padding: 0 5px; }
@@ -55,7 +52,7 @@
 </head>
 <body>
 
-    <!-- PANTALLA 0: MIS PISOS (NUEVA) -->
+    <!-- PANTALLA 0: MIS PISOS -->
     <div id="pantallaMisPisos" class="card hidden">
         <h2 style="text-align: center; margin-top: 0;">🏠 Tus Pisos</h2>
         <p style="text-align: center; color: #666; font-size: 0.9em;">Selecciona un piso para entrar</p>
@@ -66,18 +63,14 @@
     <!-- PANTALLA 1: CREAR PISO -->
     <div id="pantallaCrear" class="card hidden">
         <h2 style="text-align: center; margin-top: 0;">✨ Nuevo Piso</h2>
-        
         <label>Nombre del piso:</label>
         <input type="text" id="nombrePiso" placeholder="Ej. Piso Ciudad Real">
-        
         <label>Añadir inquilinos:</label>
         <div style="display: flex; gap: 10px; margin-bottom: 10px;">
             <input type="text" id="inputNuevoNombre" placeholder="Nombre" style="margin-bottom: 0;">
             <button id="btnAñadirNombre" type="button" style="width: 60px; margin-bottom: 0; font-size: 1.2em;">+</button>
         </div>
-        
         <div id="contenedorNuevosNombres" style="margin-bottom: 20px;"></div>
-        
         <button id="btnCrear">Crear Piso</button>
         <button id="btnCancelarCrear" class="btn-secundario hidden">Volver a mis pisos</button>
         <div id="resultado" style="margin-top: 15px; font-size: 0.9em; word-wrap: break-word;"></div>
@@ -110,6 +103,7 @@
         <div id="vistaGastos" class="card">
             <button id="btnMostrarFormGasto">+ Añadir Gasto</button>
             <div id="formGasto" class="hidden" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd;">
+                <h4 id="tituloFormGasto" style="margin-top: 0; margin-bottom: 15px;">Nuevo Gasto</h4>
                 <label>Concepto:</label>
                 <input type="text" id="conceptoGasto" placeholder="Ej. Compra Mercadona">
                 <label>Importe (€):</label>
@@ -118,8 +112,13 @@
                 <select id="pagadorGasto"></select>
                 <label>Dividir entre:</label>
                 <div id="involucradosGasto" class="checkbox-group"></div>
-                <button id="btnGuardarGasto">Guardar Gasto</button>
-                <button id="btnCancelarGasto" class="btn-secundario">Cancelar</button>
+                
+                <!-- Botones Modificados para Edición -->
+                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                    <button id="btnGuardarGasto" style="margin-bottom: 0; flex: 2;">Guardar Gasto</button>
+                    <button id="btnEliminarGasto" class="hidden" style="background-color: #dc3545; margin-bottom: 0; flex: 1;">Eliminar</button>
+                </div>
+                <button id="btnCancelarGasto" class="btn-secundario" style="margin-bottom: 0;">Cancelar</button>
             </div>
 
             <div id="seccionBalances" style="margin-bottom: 25px;">
@@ -140,12 +139,18 @@
         <div id="vistaLimpieza" class="card hidden">
             <button id="btnMostrarFormZona">+ Añadir Zona de Limpieza</button>
             <div id="formZona" class="hidden" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd;">
+                <h4 id="tituloFormZona" style="margin-top: 0; margin-bottom: 15px;">Nueva Zona</h4>
                 <label>Nombre de la zona:</label>
                 <input type="text" id="nombreZona" placeholder="Ej. Baño Principal, Cocina">
                 <label>¿Quién rota en esta zona?</label>
                 <div id="responsablesZona" class="checkbox-group"></div>
-                <button id="btnGuardarZona">Guardar Zona</button>
-                <button id="btnCancelarZona" class="btn-secundario">Cancelar</button>
+                
+                <!-- Botones Modificados para Edición -->
+                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                    <button id="btnGuardarZona" style="margin-bottom: 0; flex: 2;">Guardar Zona</button>
+                    <button id="btnEliminarZona" class="hidden" style="background-color: #dc3545; margin-bottom: 0; flex: 1;">Eliminar</button>
+                </div>
+                <button id="btnCancelarZona" class="btn-secundario" style="margin-bottom: 0;">Cancelar</button>
             </div>
 
             <div id="listaLimpiezaContenedor" style="margin-top: 15px;">
