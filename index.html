@@ -5,13 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>App Piso Estudiantes</title>
     
-    <!-- NUEVO: Etiquetas para PWA -->
+    <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#007bff">
     <link rel="apple-touch-icon" href="icon-192.png">
 
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; max-width: 400px; margin: 0 auto; background-color: #f4f4f9; }
+        
+        /* Clase para centrar pantallas de inicio */
+        .pantalla-centrada { display: flex; flex-direction: column; justify-content: center; min-height: 90vh; }
+        
         .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
         input, button, select { width: 100%; margin-bottom: 15px; padding: 12px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
         button { background-color: #007bff; color: white; border: none; font-weight: bold; cursor: pointer; }
@@ -21,6 +25,8 @@
         .btn-name:hover { background-color: #218838; }
         .btn-secundario { background-color: #6c757d; }
         .btn-secundario:hover { background-color: #5a6268; }
+        .btn-outline { background-color: transparent; border: 2px solid #007bff; color: #007bff; }
+        .btn-outline:hover { background-color: #007bff; color: white; }
         .hidden { display: none !important; }
         
         /* Estilos Pestañas */
@@ -28,7 +34,7 @@
         .tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; color: #666; font-weight: bold; }
         .tab.active { border-bottom: 3px solid #007bff; color: #007bff; }
         
-        /* Estilos Gastos y Limpieza */
+        /* Listas y Elementos */
         .item-lista { border-bottom: 1px solid #eee; padding: 12px 0; display: flex; justify-content: space-between; align-items: center; }
         .item-info { display: flex; flex-direction: column; }
         .item-titulo { font-weight: bold; font-size: 1.05em; }
@@ -43,26 +49,48 @@
         .deuda-item { background: #e9ecef; padding: 10px; border-radius: 6px; margin-bottom: 5px; font-size: 0.9em; }
         
         .mi-turno { background-color: #d4edda; padding: 10px; border-radius: 8px; border-left: 5px solid #28a745; margin-bottom: 5px; }
+        .tag-nombre { display: flex; justify-content: space-between; align-items: center; background: #e9ecef; padding: 8px 12px; border-radius: 6px; margin-bottom: 8px; font-weight: bold; }
+        .tag-eliminar { color: #dc3545; cursor: pointer; font-weight: bold; padding: 0 5px; }
     </style>
 </head>
 <body>
 
+    <!-- PANTALLA 0: MIS PISOS (NUEVA) -->
+    <div id="pantallaMisPisos" class="card hidden">
+        <h2 style="text-align: center; margin-top: 0;">🏠 Tus Pisos</h2>
+        <p style="text-align: center; color: #666; font-size: 0.9em;">Selecciona un piso para entrar</p>
+        <div id="listaMisPisos" style="margin-top: 20px;"></div>
+        <button id="btnIrCrearPiso" class="btn-outline" style="margin-top: 15px;">+ Crear un piso nuevo</button>
+    </div>
+
+    <!-- PANTALLA 1: CREAR PISO -->
     <div id="pantallaCrear" class="card hidden">
-        <h2>🏡 Crear Nuevo Piso</h2>
+        <h2 style="text-align: center; margin-top: 0;">✨ Nuevo Piso</h2>
+        
         <label>Nombre del piso:</label>
         <input type="text" id="nombrePiso" placeholder="Ej. Piso Ciudad Real">
-        <label>Inquilinos (separados por coma):</label>
-        <input type="text" id="nombresInquilinos" placeholder="Ej. Diego, Ana, Carlos">
+        
+        <label>Añadir inquilinos:</label>
+        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+            <input type="text" id="inputNuevoNombre" placeholder="Nombre" style="margin-bottom: 0;">
+            <button id="btnAñadirNombre" type="button" style="width: 60px; margin-bottom: 0; font-size: 1.2em;">+</button>
+        </div>
+        
+        <div id="contenedorNuevosNombres" style="margin-bottom: 20px;"></div>
+        
         <button id="btnCrear">Crear Piso</button>
+        <button id="btnCancelarCrear" class="btn-secundario hidden">Volver a mis pisos</button>
         <div id="resultado" style="margin-top: 15px; font-size: 0.9em; word-wrap: break-word;"></div>
     </div>
 
+    <!-- PANTALLA 2: UNIRSE A PISO -->
     <div id="pantallaUnirse" class="card hidden">
-        <h2 id="tituloUnirse">Cargando piso...</h2>
-        <p>Selecciona tu nombre para entrar:</p>
-        <div id="listaNombres"></div>
+        <h2 id="tituloUnirse" style="text-align: center;">Cargando piso...</h2>
+        <p style="text-align: center;">Selecciona tu nombre para entrar:</p>
+        <div id="listaNombres" style="margin-top: 20px;"></div>
     </div>
 
+    <!-- PANTALLA 3: DASHBOARD -->
     <div id="pantallaDashboard" class="hidden">
         
         <div class="card" style="padding-bottom: 5px;">
@@ -70,7 +98,7 @@
                 <h3 id="tituloDashboard" style="margin: 0;">Piso</h3>
                 <span id="nombreUsuarioActual" style="background: #e9ecef; padding: 5px 10px; border-radius: 15px; font-size: 0.9em; font-weight: bold;"></span>
             </div>
-            <button id="btnSalir" style="background: none; color: #dc3545; font-size: 0.8em; text-align: right; padding: 0; margin-top: 5px; width: auto; font-weight: normal;">Cambiar de usuario</button>
+            <button id="btnVolverMenu" style="background: none; color: #6c757d; font-size: 0.9em; text-align: left; padding: 0; margin-top: 10px; width: auto; font-weight: bold;">← Volver al menú de pisos</button>
         </div>
 
         <div class="tabs">
@@ -111,7 +139,6 @@
         <!-- VISTA: LIMPIEZA -->
         <div id="vistaLimpieza" class="card hidden">
             <button id="btnMostrarFormZona">+ Añadir Zona de Limpieza</button>
-            
             <div id="formZona" class="hidden" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd;">
                 <label>Nombre de la zona:</label>
                 <input type="text" id="nombreZona" placeholder="Ej. Baño Principal, Cocina">
@@ -127,7 +154,6 @@
                 <div id="listaLimpieza">Cargando...</div>
             </div>
         </div>
-
     </div>
 
     <script type="module" src="app.js"></script>
