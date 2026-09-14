@@ -19,13 +19,13 @@
         .pantalla-centrada { display: flex; flex-direction: column; justify-content: center; min-height: 90vh; }
         .card { background: #1c1c1e; padding: 20px; border-radius: 16px; margin-bottom: 20px; }
         
-        input, select { 
+        input, select, textarea { 
             width: 100%; margin-bottom: 15px; padding: 14px; 
             background-color: #2c2c2e; color: #f5f5f7;
             border: 1px solid #3a3a3c; border-radius: 12px; box-sizing: border-box; 
-            outline: none; transition: border-color 0.2s; font-size: 16px;
+            outline: none; transition: border-color 0.2s; font-size: 16px; font-family: inherit;
         }
-        input:focus, select:focus { border-color: #0a84ff; }
+        input:focus, select:focus, textarea:focus { border-color: #0a84ff; }
         
         button { 
             background-color: #0a84ff; color: #ffffff; border: none; font-weight: 600; 
@@ -48,8 +48,16 @@
         
         .hidden { display: none !important; }
         
-        .tabs { display: flex; background: #2c2c2e; padding: 3px; border-radius: 9px; margin-bottom: 20px; }
-        .tab { flex: 1; padding: 8px; text-align: center; cursor: pointer; color: #86868b; font-weight: 600; font-size: 0.9em; border-radius: 7px; transition: 0.2s; }
+        /* Pestañas (Ajustadas para scroll horizontal) */
+        .tabs { 
+            display: flex; background: #2c2c2e; padding: 4px; border-radius: 10px; margin-bottom: 20px; 
+            overflow-x: auto; white-space: nowrap; scrollbar-width: none; gap: 4px;
+        }
+        .tabs::-webkit-scrollbar { display: none; }
+        .tab { 
+            flex: 0 0 auto; padding: 8px 12px; text-align: center; cursor: pointer; color: #86868b; 
+            font-weight: 600; font-size: 0.9em; border-radius: 8px; transition: 0.2s; 
+        }
         .tab.active { background: #1c1c1e; color: #f5f5f7; box-shadow: 0 3px 8px rgba(0,0,0,0.12); }
         
         .item-lista { border-bottom: 1px solid #2c2c2e; padding: 14px 0; display: flex; justify-content: space-between; align-items: center; }
@@ -73,31 +81,24 @@
         hr { border: 0; border-top: 1px solid #3a3a3c; margin: 20px 0; }
         h2, h3, h4, h5 { margin-top: 0; }
 
-        /* ESTILOS DEL MODAL IOS (ALERTAS / CONFIRMACIONES) */
+        /* MODAL IOS */
         #iosModalOverlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999;
-            background: rgba(0,0,0,0.6); backdrop-filter: blur(5px);
-            display: flex; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center;
             opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
         }
         #iosModalOverlay.active { opacity: 1; pointer-events: auto; }
-        
         #iosModalBox {
             background: #1c1c1e; width: 280px; border-radius: 14px; text-align: center;
             transform: scale(0.9); transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; flex-direction: column; overflow: hidden;
         }
         #iosModalOverlay.active #iosModalBox { transform: scale(1); }
-        
         #iosModalTitle { font-weight: 600; font-size: 1.1em; padding: 20px 20px 5px 20px; margin: 0; color: #f5f5f7; }
         #iosModalMessage { font-size: 0.9em; padding: 0 20px 15px 20px; margin: 0; color: #86868b; line-height: 1.3; }
         #iosModalInput { margin: 0 20px 15px 20px; width: calc(100% - 40px); background: #000; border: 1px solid #3a3a3c; text-align: center; }
-        
         #iosModalButtons { display: flex; border-top: 1px solid #2c2c2e; }
-        .ios-btn { 
-            flex: 1; padding: 14px; background: transparent; border: none; font-size: 1.05em; 
-            color: #0a84ff; cursor: pointer; border-radius: 0; margin: 0; transition: background 0.2s;
-        }
+        .ios-btn { flex: 1; padding: 14px; background: transparent; border: none; font-size: 1.05em; color: #0a84ff; cursor: pointer; border-radius: 0; margin: 0; transition: background 0.2s; }
         .ios-btn:active { background: #2c2c2e; }
         #iosModalBtnCancel { font-weight: 400; border-right: 1px solid #2c2c2e; }
         #iosModalBtnConfirm { font-weight: 600; }
@@ -144,10 +145,13 @@
             <button id="btnVolverMenu" style="background: none; color: #86868b; font-size: 0.9em; text-align: left; padding: 0; margin-top: 18px; width: auto; font-weight: 500;">← Cambiar de piso</button>
         </div>
 
+        <!-- PESTAÑAS (Ahora son 5) -->
         <div class="tabs">
             <div class="tab active" id="tabGastos">💸 Gastos</div>
             <div class="tab" id="tabCompra">🛒 Compra</div>
             <div class="tab" id="tabLimpieza">🧹 Tareas</div>
+            <div class="tab" id="tabTablon">📋 Info</div>
+            <div class="tab" id="tabRanking">🏆 Top</div>
         </div>
 
         <!-- VISTA: GASTOS -->
@@ -166,15 +170,12 @@
                     <option value="manual">Manualmente</option>
                 </select>
                 
-                <div id="infoDivisionManual" style="color: #0a84ff; font-size: 0.85em; margin-bottom: 10px; font-weight: 600;" class="hidden">
-                    Calculando...
-                </div>
-                
+                <div id="infoDivisionManual" style="color: #0a84ff; font-size: 0.85em; margin-bottom: 10px; font-weight: 600;" class="hidden">Calculando...</div>
                 <div id="involucradosGasto" class="checkbox-group"></div>
                 
                 <div style="display: flex; gap: 10px; margin-bottom: 15px; margin-top: 10px;">
-                    <button id="btnGuardarGasto" style="margin-bottom: 0; flex: 2;">Guardar Gasto</button>
-                    <button id="btnEliminarGasto" class="hidden" style="background-color: #ff453a; margin-bottom: 0; flex: 1;">Eliminar</button>
+                    <button id="btnGuardarGasto" style="margin-bottom: 0; flex: 2;">Guardar</button>
+                    <button id="btnEliminarGasto" class="hidden" style="background-color: #ff453a; margin-bottom: 0; flex: 1;">Borrar</button>
                 </div>
                 <button id="btnCancelarGasto" class="btn-secundario" style="margin-bottom: 0;">Cancelar</button>
             </div>
@@ -195,36 +196,33 @@
         <div id="vistaCompra" class="card hidden">
             <h4 style="margin-bottom: 15px;">Lista de la compra</h4>
             <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                <input type="text" id="inputNuevoArticulo" placeholder="Ej. Leche, Papel higiénico..." style="margin-bottom: 0;">
+                <input type="text" id="inputNuevoArticulo" placeholder="Ej. Leche..." style="margin-bottom: 0;">
                 <button id="btnAñadirArticulo" type="button" style="width: 60px; margin-bottom: 0; font-size: 1.4em; background: #2c2c2e; color: #0a84ff; border: 1px solid #3a3a3c;">+</button>
             </div>
-            
             <div id="listaArticulos" class="checkbox-group" style="margin-bottom: 20px;">Cargando...</div>
-            
             <hr>
             <button id="btnComprarSeleccionados" style="background: linear-gradient(135deg, #0a84ff, #0066cc);">Convertir en Gasto</button>
-            <p style="font-size: 0.8em; color: #86868b; text-align: center; margin-top: -5px;">Selecciona lo que has comprado arriba para pasarlo a la pestaña de Gastos.</p>
+            <p style="font-size: 0.8em; color: #86868b; text-align: center; margin-top: -5px;">Selecciona arriba lo comprado para pasarlo a Gastos.</p>
         </div>
 
         <!-- VISTA: LIMPIEZA -->
         <div id="vistaLimpieza" class="card hidden">
-            <button id="btnMostrarFormZona">+ Añadir Zona de Limpieza</button>
+            <button id="btnMostrarFormZona">+ Añadir Zona</button>
             <div id="formZona" class="hidden" style="background: #000000; padding: 20px; border-radius: 12px; margin-bottom: 25px; border: 1px solid #2c2c2e;">
                 <h4 id="tituloFormZona">Nueva Zona</h4>
                 <input type="text" id="nombreZona" placeholder="Ej. Baño Principal">
                 <label style="color: #86868b; font-size: 0.9em; display: block; margin-bottom: 10px;">¿Quién rota en esta zona?</label>
                 <div id="responsablesZona" class="checkbox-group"></div>
-                
                 <div style="display: flex; gap: 10px; margin-bottom: 15px; margin-top: 10px;">
-                    <button id="btnGuardarZona" style="margin-bottom: 0; flex: 2;">Guardar Zona</button>
-                    <button id="btnEliminarZona" class="hidden" style="background-color: #ff453a; margin-bottom: 0; flex: 1;">Eliminar</button>
+                    <button id="btnGuardarZona" style="margin-bottom: 0; flex: 2;">Guardar</button>
+                    <button id="btnEliminarZona" class="hidden" style="background-color: #ff453a; margin-bottom: 0; flex: 1;">Borrar</button>
                 </div>
                 <button id="btnCancelarZona" class="btn-secundario" style="margin-bottom: 0;">Cancelar</button>
             </div>
 
             <div id="listaLimpiezaContenedor" style="margin-top: 15px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <h4 id="tituloSeccionLimpieza" style="margin: 0;">Tareas de la semana</h4>
+                    <h4 id="tituloSeccionLimpieza" style="margin: 0;">Tareas semanales</h4>
                     <button id="btnToggleCalendario" class="btn-outline" style="width: auto; padding: 6px 12px; margin: 0; font-size: 0.85em;">📅 Ver Mes</button>
                 </div>
                 <div id="listaLimpieza">Cargando...</div>
@@ -238,9 +236,61 @@
                 </div>
             </div>
         </div>
+
+        <!-- VISTA: TABLÓN -->
+        <div id="vistaTablon" class="card hidden">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h4 style="margin: 0;">Tablón de Supervivencia</h4>
+                <button id="btnEditarTablon" style="background: none; border: none; padding: 0; width: auto; font-size: 1.2em;">✏️</button>
+            </div>
+            
+            <div id="tablonDisplay">
+                <div class="item-lista" style="border-bottom: 1px solid #2c2c2e;">
+                    <div class="item-info">
+                        <span class="item-titulo">Wi-Fi</span>
+                        <span class="item-detalle" id="displayWifiNombre">No configurado</span>
+                    </div>
+                    <div style="font-weight: 600; color: #0a84ff; font-size: 1.1em;" id="displayWifiPass">-</div>
+                </div>
+                <div class="item-lista" style="border-bottom: 1px solid #2c2c2e;">
+                    <div class="item-info">
+                        <span class="item-titulo">IBAN Alquiler</span>
+                        <span class="item-detalle" id="displayIban">No configurado</span>
+                    </div>
+                    <button id="btnCopiarIban" style="background: #2c2c2e; color: #0a84ff; padding: 6px 12px; border-radius: 8px; font-size: 0.85em; margin: 0; width: auto; border: 1px solid #3a3a3c;">Copiar</button>
+                </div>
+                <div style="padding: 15px 0;">
+                    <h5 style="margin: 0 0 8px 0; color: #86868b;">Notas importantes:</h5>
+                    <p id="displayNotas" style="margin: 0; font-size: 0.9em; white-space: pre-wrap; line-height: 1.4; color: #f5f5f7;">Sin notas.</p>
+                </div>
+            </div>
+
+            <div id="tablonForm" class="hidden" style="background: #000; padding: 15px; border-radius: 12px; border: 1px solid #2c2c2e;">
+                <label style="color: #86868b; font-size: 0.9em;">Nombre del Wi-Fi:</label>
+                <input type="text" id="inputWifiNombre" placeholder="Mi_Red_5G">
+                <label style="color: #86868b; font-size: 0.9em;">Contraseña Wi-Fi:</label>
+                <input type="text" id="inputWifiPass" placeholder="Contraseña">
+                <label style="color: #86868b; font-size: 0.9em;">IBAN del Casero / Piso:</label>
+                <input type="text" id="inputIban" placeholder="ESXX XXXX...">
+                <label style="color: #86868b; font-size: 0.9em;">Notas importantes (Días de basura, reglas):</label>
+                <textarea id="inputNotasTablon" rows="4" placeholder="Recuerda sacar el cartón los jueves..."></textarea>
+                <div style="display: flex; gap: 10px;">
+                    <button id="btnGuardarTablon" style="flex: 2; margin-bottom: 0;">Guardar</button>
+                    <button id="btnCancelarTablon" class="btn-secundario" style="flex: 1; margin-bottom: 0;">Cancelar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- VISTA: RANKING -->
+        <div id="vistaRanking" class="card hidden">
+            <h4 style="margin-bottom: 5px;">Ranking del Piso 🏆</h4>
+            <p style="font-size: 0.85em; color: #86868b; margin-top: 0; margin-bottom: 20px;">Títulos calculados según la actividad de gastos del piso.</p>
+            <div id="contenidoRanking">Calculando ranking...</div>
+        </div>
+
     </div>
 
-    <!-- EL MODAL PERSONALIZADO IOS -->
+    <!-- MODAL IOS -->
     <div id="iosModalOverlay">
         <div id="iosModalBox">
             <h3 id="iosModalTitle">Título</h3>
