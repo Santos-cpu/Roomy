@@ -1,6 +1,6 @@
 {
   "name": "Gestión Piso Estudiantes",
-  "short_name": "Mi Piso",
+  "short_name": "Roomy",
   "description": "App para gestionar gastos y limpieza en pisos compartidos",
   "start_url": "/",
   "display": "standalone",
