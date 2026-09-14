@@ -715,4 +715,12 @@ function generarRankingGlobal() {
 
 if ('serviceWorker' in navigator) window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(()=>{}); });
 
+document.getElementById('btnVolverMenu').addEventListener('click', () => { 
+    if(typeof unsubGastos !== 'undefined' && unsubGastos) unsubGastos(); 
+    if(typeof unsubCompra !== 'undefined' && unsubCompra) unsubCompra(); 
+    if(typeof unsubLimpieza !== 'undefined' && unsubLimpieza) unsubLimpieza();
+    localStorage.removeItem('ultimoPisoActivo'); 
+    window.location.reload(); 
+});
+
 iniciarApp();
