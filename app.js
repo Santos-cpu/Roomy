@@ -100,17 +100,69 @@ async function iniciarApp() {
 }
 
 function mostrarPantallaMisPisos() {
-    pantallaMisPisos.classList.remove('hidden'); pantallaCrear.classList.add('hidden');
+    pantallaMisPisos.classList.remove('hidden'); 
+    pantallaCrear.classList.add('hidden');
     document.getElementById('btnCancelarCrear').classList.remove('hidden');
-    const div = document.getElementById('listaMisPisos'); div.innerHTML = '';
-    misPisos.forEach(piso => {
-        const btn = document.createElement('button'); btn.className = 'btn-piso';
+    const div = document.getElementById('listaMisPisos'); 
+    div.innerHTML = '';
+    
+    if (misPisos.length === 0) {
+        div.innerHTML = '<p style="color: #86868b; text-align: center; margin-bottom: 20px;">No tienes ningún piso guardado.</p>';
+        return;
+    }
+
+    misPisos.forEach((piso, index) => {
+        // Contenedor en línea para el botón del piso y la papelera
+        const fila = document.createElement('div');
+        fila.style.cssText = "display: flex; gap: 10px; align-items: center; margin-bottom: 12px;";
+
+        const btn = document.createElement('button'); 
+        btn.className = 'btn-piso';
+        btn.style.margin = "0"; 
+        btn.style.flex = "1";
         btn.innerHTML = `${piso.nombrePiso} <br><small style="font-weight:600; font-size:0.85em; color: rgba(0,0,0,0.65); display: block; margin-top: 4px;">👤 Entrar como ${piso.nombreUsuario}</small>`;
+        
         btn.onclick = () => {
-            document.body.classList.remove('pantalla-centrada'); pantallaMisPisos.classList.add('hidden');
-            localStorage.setItem('ultimoPisoActivo', piso.id); nombreUsuario = piso.nombreUsuario; idPisoActual = piso.id; mostrarDashboard(piso.nombreUsuario, piso.id);
+            document.body.classList.remove('pantalla-centrada'); 
+            pantallaMisPisos.classList.add('hidden');
+            localStorage.setItem('ultimoPisoActivo', piso.id); 
+            nombreUsuario = piso.nombreUsuario; 
+            idPisoActual = piso.id; 
+            mostrarDashboard(piso.nombreUsuario, piso.id);
         };
-        div.appendChild(btn);
+
+        // Botón de eliminar (Papelera)
+        const btnEliminar = document.createElement('button');
+        btnEliminar.innerHTML = "🗑️";
+        btnEliminar.title = "Eliminar piso de la lista";
+        btnEliminar.style.cssText = "background: #2c2c2e; border: 1px solid #3a3a3c; width: 54px; height: 54px; border-radius: 14px; cursor: pointer; font-size: 1.3em; display: flex; align-items: center; justify-content: center; margin: 0; flex-shrink: 0;";
+        
+        btnEliminar.onclick = async () => {
+            const seguro = await window.mostrarConfirmacion("Eliminar piso", `¿Seguro que quieres borrar "${piso.nombrePiso}" de tus pisos guardados?`);
+            if (seguro) {
+                // Borramos de la lista local
+                misPisos.splice(index, 1);
+                localStorage.setItem('misPisos_v2', JSON.stringify(misPisos));
+                
+                // Si borramos el que estaba activo por defecto, limpiamos
+                if (localStorage.getItem('ultimoPisoActivo') === piso.id) {
+                    localStorage.removeItem('ultimoPisoActivo');
+                }
+                
+                // Recargamos la pantalla de pisos
+                mostrarPantallaMisPisos();
+                
+                // Si ya no quedan pisos, mandamos a la pantalla de crear
+                if (misPisos.length === 0) {
+                    pantallaMisPisos.classList.add('hidden');
+                    pantallaCrear.classList.remove('hidden');
+                }
+            }
+        };
+
+        fila.appendChild(btn);
+        fila.appendChild(btnEliminar);
+        div.appendChild(fila);
     });
 }
 
