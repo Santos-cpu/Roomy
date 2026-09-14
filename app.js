@@ -42,7 +42,6 @@ window.mostrarModal = function({ titulo, mensaje, tipo = 'alert', valorInput = '
         if (tipo === 'prompt') inputEl.classList.remove('hidden');
 
         overlay.classList.add('active');
-
         const close = () => { overlay.classList.remove('active'); btnConfirm.onclick = null; btnCancel.onclick = null; };
 
         btnConfirm.onclick = () => { close(); if (tipo === 'prompt') resolve(inputEl.value); else resolve(true); };
@@ -170,23 +169,34 @@ document.getElementById('btnCopiarEnlace').addEventListener('click', async () =>
     catch (e) { await window.mostrarAlerta("Error al copiar", "Cópialo manualmente: \n\n" + enlace); }
 });
 
-// PESTAÑAS (Añadido Tablon y Ranking)
+// PESTAÑAS (Gastos, Compra, Tareas, Ranking)
 function activarPestaña(idTab, idVista) {
-    ['tabGastos', 'tabCompra', 'tabLimpieza', 'tabTablon', 'tabRanking'].forEach(t => document.getElementById(t).classList.remove('active'));
-    ['vistaGastos', 'vistaCompra', 'vistaLimpieza', 'vistaTablon', 'vistaRanking'].forEach(v => document.getElementById(v).classList.add('hidden'));
+    ['tabGastos', 'tabCompra', 'tabLimpieza', 'tabRanking'].forEach(t => document.getElementById(t).classList.remove('active'));
+    ['vistaGastos', 'vistaCompra', 'vistaLimpieza', 'vistaRanking'].forEach(v => document.getElementById(v).classList.add('hidden'));
     document.getElementById(idTab).classList.add('active'); document.getElementById(idVista).classList.remove('hidden');
 }
 document.getElementById('tabGastos').addEventListener('click', () => activarPestaña('tabGastos', 'vistaGastos'));
 document.getElementById('tabCompra').addEventListener('click', () => activarPestaña('tabCompra', 'vistaCompra'));
 document.getElementById('tabLimpieza').addEventListener('click', () => activarPestaña('tabLimpieza', 'vistaLimpieza'));
-document.getElementById('tabTablon').addEventListener('click', () => activarPestaña('tabTablon', 'vistaTablon'));
 document.getElementById('tabRanking').addEventListener('click', () => activarPestaña('tabRanking', 'vistaRanking'));
+
+// TABLÓN (Comportamiento de vista superpuesta / Modal)
+document.getElementById('btnAbrirTablon').addEventListener('click', () => {
+    document.getElementById('contenedorPestañas').classList.add('hidden');
+    document.getElementById('vistasPrincipales').classList.add('hidden');
+    document.getElementById('vistaTablon').classList.remove('hidden');
+});
+document.getElementById('btnCerrarTablon').addEventListener('click', () => {
+    document.getElementById('vistaTablon').classList.add('hidden');
+    document.getElementById('contenedorPestañas').classList.remove('hidden');
+    document.getElementById('vistasPrincipales').classList.remove('hidden');
+});
 
 // --- MÓDULO GASTOS ---
 function resetFormGasto() {
     idGastoEditando = null; document.getElementById('tituloFormGasto').innerText = 'Nuevo Gasto';
     document.getElementById('conceptoGasto').value = ''; document.getElementById('importeGasto').value = '';
-    document.getElementById('btnGuardarGasto').innerText = 'Guardar Gasto'; document.getElementById('btnEliminarGasto').classList.add('hidden');
+    document.getElementById('btnGuardarGasto').innerText = 'Guardar'; document.getElementById('btnEliminarGasto').classList.add('hidden');
     document.getElementById('tipoDivisionGasto').value = 'iguales'; prepararFormularioGastos();
 }
 
@@ -303,7 +313,7 @@ async function cargarListaGastos() {
             listaHtml.innerHTML = '<p style="color:#86868b;">No hay gastos.</p>';
             document.getElementById('listaBalances').innerHTML = '<p style="color:#86868b;">Sin actividad</p>';
             document.getElementById('listaDeudas').innerHTML = ''; 
-            generarRanking([], {}); // Vacío
+            generarRanking([], {}); 
             return;
         }
         listaHtml.innerHTML = '';
@@ -350,7 +360,6 @@ function calcularBalancesYDeudas(gastos) {
     }
     document.getElementById('listaDeudas').innerHTML = htmlDeudas;
     
-    // Llamar al generador del Ranking
     generarRanking(gastos, balances);
 }
 
@@ -504,7 +513,8 @@ document.getElementById('btnToggleCalendario').addEventListener('click', () => {
 document.getElementById('btnMesAnterior').addEventListener('click', () => { fechaCalendario = new Date(fechaCalendario.getFullYear(), fechaCalendario.getMonth() - 1, 1); renderCalendarioMensual(); });
 document.getElementById('btnMesSiguiente').addEventListener('click', () => { fechaCalendario = new Date(fechaCalendario.getFullYear(), fechaCalendario.getMonth() + 1, 1); renderCalendarioMensual(); });
 
-// --- MÓDULO TABLÓN ---
+
+// --- MÓDULO TABLÓN (INFO) ---
 function cargarTablon(tablon) {
     document.getElementById('displayWifiNombre').innerText = tablon.wifi_nombre || "No configurado";
     document.getElementById('displayWifiPass').innerText = tablon.wifi_pass || "-";
@@ -515,17 +525,27 @@ function cargarTablon(tablon) {
     document.getElementById('inputWifiPass').value = tablon.wifi_pass || "";
     document.getElementById('inputIban').value = tablon.iban || "";
     document.getElementById('inputNotasTablon').value = tablon.notas || "";
+
+    // Generar el código QR de Wi-Fi automáticamente (formato estándar de conexión)
+    const qrContainer = document.getElementById('contenedorQR');
+    const qrImg = document.getElementById('imgWifiQR');
+    if (tablon.wifi_nombre && tablon.wifi_pass) {
+        // String nativo para conexión Wi-Fi OS
+        const wifiString = `WIFI:S:${tablon.wifi_nombre};T:WPA;P:${tablon.wifi_pass};;`;
+        qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(wifiString)}`;
+        qrContainer.classList.remove('hidden');
+    } else {
+        qrContainer.classList.add('hidden');
+    }
 }
 
 document.getElementById('btnEditarTablon').addEventListener('click', () => {
     document.getElementById('tablonDisplay').classList.add('hidden');
-    document.getElementById('btnEditarTablon').classList.add('hidden');
     document.getElementById('tablonForm').classList.remove('hidden');
 });
 
 document.getElementById('btnCancelarTablon').addEventListener('click', () => {
     document.getElementById('tablonForm').classList.add('hidden');
-    document.getElementById('btnEditarTablon').classList.remove('hidden');
     document.getElementById('tablonDisplay').classList.remove('hidden');
 });
 
@@ -541,51 +561,96 @@ document.getElementById('btnGuardarTablon').addEventListener('click', async () =
         await updateDoc(doc(db, "grupos", idPisoActual), { tablon: nTablon });
         cargarTablon(nTablon);
         document.getElementById('btnCancelarTablon').click();
-    } catch (e) { await window.mostrarAlerta("Error", "No se pudo guardar el tablón."); } 
+    } catch (e) { await window.mostrarAlerta("Error", "No se pudo guardar la Info."); } 
     finally { document.getElementById('btnGuardarTablon').innerText = "Guardar"; }
 });
 
 document.getElementById('btnCopiarIban').addEventListener('click', async () => {
     const iban = document.getElementById('displayIban').innerText;
     if(iban === "No configurado") return;
-    try { await navigator.clipboard.writeText(iban); await window.mostrarAlerta("Copiado", "IBAN copiado. Pégalo en tu banco."); } 
+    try { await navigator.clipboard.writeText(iban); await window.mostrarAlerta("Copiado", "IBAN copiado. Abre la app de tu banco."); } 
     catch (e) { await window.mostrarAlerta("Copia manual", iban); }
 });
 
-// --- MÓDULO RANKING ---
+document.getElementById('btnCopiarWifi').addEventListener('click', async () => {
+    const pass = document.getElementById('displayWifiPass').innerText;
+    if(pass === "-" || pass === "") return;
+    try { await navigator.clipboard.writeText(pass); await window.mostrarAlerta("Copiado", "Contraseña copiada al portapapeles."); } 
+    catch (e) { await window.mostrarAlerta("Contraseña", pass); }
+});
+
+
+// --- MÓDULO RANKING: TITULOS PARA TODOS ---
 function generarRanking(gastos, balances) {
     const cont = document.getElementById('contenidoRanking');
-    if(gastos.length === 0) { cont.innerHTML = "<p style='color:#86868b;'>Añade gastos para generar el ranking.</p>"; return; }
+    if (participantesGrupo.length === 0) return;
     
     let totalPagado = {}; participantesGrupo.forEach(p => totalPagado[p] = 0);
     gastos.forEach(g => { if(totalPagado[g.pagador] !== undefined) totalPagado[g.pagador] += g.importe; });
     
-    let pagadoresArr = Object.keys(totalPagado).map(k => ({ nombre: k, cantidad: totalPagado[k] })).sort((a,b) => b.cantidad - a.cantidad);
-    let balancesArr = Object.keys(balances).map(k => ({ nombre: k, saldo: balances[k] })).sort((a,b) => b.saldo - a.saldo);
+    let usuarios = participantesGrupo.map(p => ({ nombre: p, saldo: balances[p], pagado: totalPagado[p] }));
+    let porSaldo = [...usuarios].sort((a,b) => b.saldo - a.saldo);
+    let porPagado = [...usuarios].sort((a,b) => b.pagado - a.pagado);
     
-    const topAcreedor = balancesArr[0]; 
-    const topDeudor = balancesArr[balancesArr.length - 1]; 
-    const topPagador = pagadoresArr[0];
-    
-    let html = "";
-    html += crearTarjetaRanking("👑 El Inversor", topPagador.cantidad > 0 ? topPagador.nombre : "Nadie", "Es quien más dinero ha puesto para el piso en total.", "💰");
-    html += crearTarjetaRanking("😎 El Sugar Daddy", topAcreedor.saldo > 0.01 ? topAcreedor.nombre : "Nadie", "Es la persona a la que más dinero se le debe actualmente.", "📈");
-    html += crearTarjetaRanking("🤡 El Moroso", topDeudor.saldo < -0.01 ? topDeudor.nombre : "Nadie", "Es quien más dinero debe al resto de compañeros.", "📉", true);
-    cont.innerHTML = html;
-}
+    let asignaciones = [];
+    let yaAsignados = new Set();
 
-function crearTarjetaRanking(titulo, nombre, desc, emoji, esMalo = false) {
-    const color = esMalo ? '#ff453a' : '#32d74b';
-    const bg = esMalo ? 'rgba(255, 69, 58, 0.05)' : 'rgba(50, 215, 75, 0.05)';
-    return `
-        <div style="background: ${bg}; border-radius: 12px; padding: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 15px; border: 1px solid #2c2c2e; border-left: 4px solid ${color};">
-            <div style="font-size: 2.2em;">${emoji}</div>
-            <div>
-                <div style="font-size: 0.85em; color: #86868b; font-weight: 700; text-transform: uppercase;">${titulo}</div>
-                <div style="font-size: 1.25em; font-weight: bold; color: #f5f5f7; margin: 2px 0;">${nombre}</div>
-                <div style="font-size: 0.8em; color: #86868b; line-height: 1.3;">${desc}</div>
-            </div>
-        </div>`;
+    // 1. El Sugar Daddy (Máximo saldo positivo)
+    if (porSaldo[0].saldo > 0.01) {
+        asignaciones.push({ nombre: porSaldo[0].nombre, titulo: "😎 El Sugar Daddy", desc: "El banco central del piso. Todos le deben dinero.", color: '#32d74b' });
+        yaAsignados.add(porSaldo[0].nombre);
+    }
+
+    // 2. El Moroso (Máximo saldo negativo)
+    const peor = porSaldo[porSaldo.length - 1];
+    if (peor.saldo < -0.01 && !yaAsignados.has(peor.nombre)) {
+        asignaciones.push({ nombre: peor.nombre, titulo: "🤡 El Peligro Financiero", desc: "Suena el teléfono y son los cobradores del frac.", color: '#ff453a' });
+        yaAsignados.add(peor.nombre);
+    }
+
+    // 3. El Inversor (El que más ha pagado en total)
+    const inversor = porPagado[0];
+    if (inversor.pagado > 0 && !yaAsignados.has(inversor.nombre)) {
+        asignaciones.push({ nombre: inversor.nombre, titulo: "👑 El Inversor", desc: "Siempre saca la tarjeta primero. Es el dueño de todo.", color: '#0a84ff' });
+        yaAsignados.add(inversor.nombre);
+    }
+
+    // 4. Repartir al resto de compañeros para que nadie falte
+    let titulosExtra = [
+        { t: "🐌 El 'Mañana te hago Bizum'", d: "Debe dinero, pero le cuesta soltarlo de la cuenta.", c: '#ff9f0a' },
+        { t: "😇 El Santo Patrón", d: "Sus cuentas están saneadas. Un ejemplo de convivencia.", c: '#32d74b' },
+        { t: "🧘 El Suizo", d: "Neutralidad pura. Ni debe ni le deben. Vive en paz.", c: '#86868b' },
+        { t: "🕵️ El Contable", d: "Calcula todo al céntimo para que le devuelvan lo suyo.", c: '#0a84ff' },
+        { t: "🍷 El Sibarita", d: "Probablemente se haya gastado su parte en cosas caras.", c: '#bf5af2' }
+    ];
+
+    usuarios.forEach(u => {
+        if (!yaAsignados.has(u.nombre)) {
+            // Asignación de emergencia según su estado
+            if (u.saldo < -0.01) {
+                asignaciones.push({ nombre: u.nombre, titulo: "💸 Manos Agujereadas", desc: "El dinero se le escapa. Tiene algunas deudas pendientes.", color: '#ff9f0a' });
+            } else if (u.pagado === 0 && u.saldo === 0) {
+                asignaciones.push({ nombre: u.nombre, titulo: "👻 El Fantasma", desc: "Cero euros movidos. ¿Seguro que sigue viviendo aquí?", color: '#86868b' });
+            } else {
+                let extra = titulosExtra.shift() || { t: "🏠 El Inquilino Estándar", d: "Cumple su función vital sin hacer ruido.", c: '#86868b' };
+                asignaciones.push({ nombre: u.nombre, titulo: extra.t, desc: extra.d, color: extra.c });
+            }
+            yaAsignados.add(u.nombre);
+        }
+    });
+
+    let html = "";
+    asignaciones.forEach(a => {
+        html += `
+            <div style="background: rgba(255,255,255,0.03); border-radius: 12px; padding: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 15px; border: 1px solid #2c2c2e; border-left: 4px solid ${a.color};">
+                <div>
+                    <div style="font-size: 0.85em; color: #86868b; font-weight: 700; text-transform: uppercase;">${a.titulo}</div>
+                    <div style="font-size: 1.25em; font-weight: bold; color: #f5f5f7; margin: 2px 0;">${a.nombre}</div>
+                    <div style="font-size: 0.8em; color: #86868b; line-height: 1.3;">${a.desc}</div>
+                </div>
+            </div>`;
+    });
+    cont.innerHTML = html;
 }
 
 // LOGOUT
