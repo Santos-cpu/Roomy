@@ -52,7 +52,6 @@
 </head>
 <body>
 
-    <!-- PANTALLA 0: MIS PISOS -->
     <div id="pantallaMisPisos" class="card hidden">
         <h2 style="text-align: center; margin-top: 0;">🏠 Tus Pisos</h2>
         <p style="text-align: center; color: #666; font-size: 0.9em;">Selecciona un piso para entrar</p>
@@ -60,7 +59,6 @@
         <button id="btnIrCrearPiso" class="btn-outline" style="margin-top: 15px;">+ Crear un piso nuevo</button>
     </div>
 
-    <!-- PANTALLA 1: CREAR PISO -->
     <div id="pantallaCrear" class="card hidden">
         <h2 style="text-align: center; margin-top: 0;">✨ Nuevo Piso</h2>
         <label>Nombre del piso:</label>
@@ -76,16 +74,13 @@
         <div id="resultado" style="margin-top: 15px; font-size: 0.9em; word-wrap: break-word;"></div>
     </div>
 
-    <!-- PANTALLA 2: UNIRSE A PISO -->
     <div id="pantallaUnirse" class="card hidden">
         <h2 id="tituloUnirse" style="text-align: center;">Cargando piso...</h2>
         <p style="text-align: center;">Selecciona tu nombre para entrar:</p>
         <div id="listaNombres" style="margin-top: 20px;"></div>
     </div>
 
-    <!-- PANTALLA 3: DASHBOARD -->
     <div id="pantallaDashboard" class="hidden">
-        
         <div class="card" style="padding-bottom: 5px;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <h3 id="tituloDashboard" style="margin: 0;">Piso</h3>
@@ -112,8 +107,6 @@
                 <select id="pagadorGasto"></select>
                 <label>Dividir entre:</label>
                 <div id="involucradosGasto" class="checkbox-group"></div>
-                
-                <!-- Botones Modificados para Edición -->
                 <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                     <button id="btnGuardarGasto" style="margin-bottom: 0; flex: 2;">Guardar Gasto</button>
                     <button id="btnEliminarGasto" class="hidden" style="background-color: #dc3545; margin-bottom: 0; flex: 1;">Eliminar</button>
@@ -145,7 +138,6 @@
                 <label>¿Quién rota en esta zona?</label>
                 <div id="responsablesZona" class="checkbox-group"></div>
                 
-                <!-- Botones Modificados para Edición -->
                 <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                     <button id="btnGuardarZona" style="margin-bottom: 0; flex: 2;">Guardar Zona</button>
                     <button id="btnEliminarZona" class="hidden" style="background-color: #dc3545; margin-bottom: 0; flex: 1;">Eliminar</button>
@@ -154,9 +146,24 @@
             </div>
 
             <div id="listaLimpiezaContenedor" style="margin-top: 15px;">
-                <h4 style="margin-top: 0;">Tareas de esta semana</h4>
-                <p style="font-size: 0.85em; color: #666; margin-top: -10px; margin-bottom: 15px;">Las rotaciones cambian automáticamente cada lunes.</p>
+                <!-- CABECERA CON BOTÓN PARA VER CALENDARIO -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h4 id="tituloSeccionLimpieza" style="margin: 0;">Tareas de esta semana</h4>
+                    <button id="btnToggleCalendario" class="btn-outline" style="width: auto; padding: 6px 10px; margin: 0; font-size: 0.85em;">📅 Ver Mes</button>
+                </div>
+                
+                <!-- VISTA SEMANA ACTUAL -->
                 <div id="listaLimpieza">Cargando...</div>
+
+                <!-- VISTA CALENDARIO MENSUAL (Oculto por defecto) -->
+                <div id="calendarioMensual" class="hidden">
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: #e9ecef; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
+                        <button id="btnMesAnterior" style="width: auto; margin: 0; padding: 5px 15px; background: none; color: #007bff; font-size: 1.2em;">◀</button>
+                        <h4 id="textoMesAnio" style="margin: 0; text-transform: capitalize;">Cargando...</h4>
+                        <button id="btnMesSiguiente" style="width: auto; margin: 0; padding: 5px 15px; background: none; color: #007bff; font-size: 1.2em;">▶</button>
+                    </div>
+                    <div id="contenedorSemanasMes"></div>
+                </div>
             </div>
         </div>
     </div>
