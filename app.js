@@ -74,8 +74,9 @@ function mostrarPantallaMisPisos() {
     
     misPisos.forEach(piso => {
         const btn = document.createElement('button');
-        btn.className = 'btn-name';
-        btn.innerHTML = `${piso.nombrePiso} <br><small style="font-weight:normal; font-size:0.85em; color:#86868b;">Entrar como ${piso.nombreUsuario}</small>`;
+        // APLICAMOS LA NUEVA CLASE VERDE DESTACADA
+        btn.className = 'btn-piso';
+        btn.innerHTML = `${piso.nombrePiso} <br><small style="font-weight:600; font-size:0.85em; color: rgba(0,0,0,0.65); display: block; margin-top: 4px;">👤 Entrar como ${piso.nombreUsuario}</small>`;
         btn.onclick = () => {
             document.body.classList.remove('pantalla-centrada');
             pantallaMisPisos.classList.add('hidden');
@@ -172,6 +173,30 @@ async function mostrarDashboard(nombre, id) {
         await cargarListaLimpieza();
     }
 }
+
+// NUEVO: CAMBIAR EL NOMBRE DEL PISO DESDE EL DASHBOARD
+document.getElementById('btnEditarNombrePiso').addEventListener('click', async () => {
+    const nombreActual = document.getElementById('tituloDashboard').innerText;
+    const nuevoNombre = prompt("Introduce el nuevo nombre para este grupo:", nombreActual);
+    
+    if (nuevoNombre && nuevoNombre.trim() !== "" && nuevoNombre.trim() !== nombreActual) {
+        try {
+            await updateDoc(doc(db, "grupos", idPisoActual), {
+                nombre_piso: nuevoNombre.trim()
+            });
+            
+            document.getElementById('tituloDashboard').innerText = nuevoNombre.trim();
+            
+            let pisoEnMenu = misPisos.find(p => p.id === idPisoActual);
+            if (pisoEnMenu) {
+                pisoEnMenu.nombrePiso = nuevoNombre.trim();
+                localStorage.setItem('misPisos_v2', JSON.stringify(misPisos));
+            }
+        } catch (error) {
+            alert("Error al cambiar el nombre.");
+        }
+    }
+});
 
 document.getElementById('btnCopiarEnlace').addEventListener('click', () => {
     const enlace = `${window.location.origin}${window.location.pathname}?id=${idPisoActual}`;
