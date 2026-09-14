@@ -222,6 +222,7 @@ document.getElementById('tipoDivisionGasto').addEventListener('change', preparar
 function prepararFormularioGastos(gastoObj = null) {
     const selectPagador = document.getElementById('pagadorGasto'); const divInvolucrados = document.getElementById('involucradosGasto');
     const tipoDiv = document.getElementById('tipoDivisionGasto').value; const infoManual = document.getElementById('infoDivisionManual');
+    
     if(!gastoObj) {
         selectPagador.innerHTML = '';
         participantesGrupo.forEach(p => {
@@ -266,6 +267,7 @@ window.abrirEditarGasto = function(gastoObj) {
     idGastoEditando = gastoObj.id; document.getElementById('tituloFormGasto').innerText = 'Editar Gasto';
     document.getElementById('conceptoGasto').value = gastoObj.concepto; document.getElementById('importeGasto').value = gastoObj.importe;
     if (gastoObj.involucrados.length > 0 && typeof gastoObj.involucrados[0] === 'object') { document.getElementById('tipoDivisionGasto').value = 'manual'; } else { document.getElementById('tipoDivisionGasto').value = 'iguales'; }
+    
     prepararFormularioGastos(gastoObj); document.getElementById('pagadorGasto').value = gastoObj.pagador;
     document.getElementById('btnGuardarGasto').innerText = 'Actualizar'; document.getElementById('btnEliminarGasto').classList.remove('hidden');
     document.getElementById('formGasto').classList.remove('hidden'); document.getElementById('btnMostrarFormGasto').classList.add('hidden');
@@ -285,6 +287,7 @@ document.getElementById('btnGuardarGasto').addEventListener('click', async () =>
     const pagador = document.getElementById('pagadorGasto').value; const tipo = document.getElementById('tipoDivisionGasto').value;
     if (!concepto || isNaN(importe)) return await window.mostrarAlerta("Datos incompletos", "Rellena el concepto y el importe.");
     let involucradosData = [];
+    
     if (tipo === 'iguales') {
         const cbs = document.querySelectorAll('.gasto-cb:checked');
         if(cbs.length === 0) return await window.mostrarAlerta("Aviso", "Selecciona al menos a una persona para dividir.");
@@ -304,6 +307,7 @@ document.getElementById('btnGuardarGasto').addEventListener('click', async () =>
             inputsVacios.forEach(nombre => { involucradosData.push({ nombre: nombre, importe: aCadaVacio }); });
         }
     }
+    
     const boton = document.getElementById('btnGuardarGasto'); boton.innerText = "Guardando..."; boton.disabled = true;
     const datosGasto = { concepto: concepto, importe: importe, pagador: pagador, involucrados: involucradosData };
     try {
@@ -433,7 +437,7 @@ document.getElementById('btnCancelarZona').addEventListener('click', () => { doc
 
 window.abrirEditarZona = function(idZona) {
     const zonaObj = zonasLimpiezaCache.find(z => z.id === idZona); if(!zonaObj) return;
-    idZonaEditando = zonaObj.id; resetFormZona();
+    resetFormZona(); idZonaEditando = zonaObj.id; // ORDEN CORREGIDO PARA QUE FUNCIONE ELIMINAR
     document.getElementById('tituloFormZona').innerText = 'Editar Zona'; document.getElementById('nombreZona').value = zonaObj.nombre_zona;
     document.getElementById('frecuenciaZona').value = zonaObj.frecuencia || 1;
     document.querySelectorAll('#responsablesZona input[type="checkbox"]').forEach(cb => { cb.checked = zonaObj.responsables.includes(cb.value); });
@@ -476,7 +480,6 @@ async function cargarListaLimpieza() {
         zonasLimpiezaCache = [];
         if (!snap.empty) { snap.forEach(d => { const z = d.data(); z.id = d.id; zonasLimpiezaCache.push(z); }); zonasLimpiezaCache.sort((a, b) => a.nombre_zona.localeCompare(b.nombre_zona)); }
         
-        // CALCULO STRIKES EN EL PASADO
         ultimosStrikes = {}; participantesGrupo.forEach(p => ultimosStrikes[p] = 0);
         let minTime = Math.min(...zonasLimpiezaCache.map(z => new Date(z.fecha_base).getTime()));
         if (zonasLimpiezaCache.length > 0 && isFinite(minTime)) {
@@ -509,7 +512,7 @@ function calcularAsignacionesParaSemana(fechaLunes) {
     zonasLimpiezaCache.forEach((zona, i) => {
         const freq = zona.frecuencia || 1;
         let sem = Math.floor((fechaLunes.getTime() - new Date(zona.fecha_base).getTime()) / 604800000); 
-        if (sem < 0 || sem % freq !== 0) return; // No toca esta semana
+        if (sem < 0 || sem % freq !== 0) return;
 
         let periodos = Math.floor(sem / freq);
         let idIdeal = (periodos + i) % zona.responsables.length; let toca = zona.responsables[idIdeal]; let libre = false;
@@ -533,8 +536,7 @@ function renderVistaSemanaActual() {
     
     asigs.forEach(a => {
         const esMi = a.leTocaA === nombreUsuario;
-        let hechas = a.zonaRef.semanas_hechas || {};
-        let estaHecha = hechas[tsActual] ? true : false;
+        let hechas = a.zonaRef.semanas_hechas || {}; let estaHecha = hechas[tsActual] ? true : false;
         
         let botonHTML = "";
         if (estaHecha) { botonHTML = `<span style="color:#32d74b; font-weight:bold; font-size:0.9em;">✅ Completada</span>`; } 
@@ -574,8 +576,7 @@ function renderCalendarioMensual() {
         
         let html = `<div style="background:#1c1c1e; border:${esHoy ? '2px solid #32d74b' : '1px solid #2c2c2e'}; border-radius:12px; padding:14px; margin-bottom:15px;"><h5 style="color:#0a84ff; border-bottom:1px solid #2c2c2e; padding-bottom:8px; font-size:1em;">📅 Del ${l.getDate()} ${nombres[l.getMonth()].substring(0,3)} al ${dom.getDate()} ${nombres[dom.getMonth()].substring(0,3)} ${esHoy ? '<span style="background:#32d74b; color:#000; padding:2px 6px; border-radius:10px; font-size:0.7em; margin-left:5px;">Actual</span>' : ''}</h5>`;
         asigsSem.forEach(a => {
-            const esM = a.leTocaA === nombreUsuario;
-            let hechas = a.zonaRef.semanas_hechas || {}; let check = hechas[l.getTime()] ? '✅ ' : '';
+            const esM = a.leTocaA === nombreUsuario; let hechas = a.zonaRef.semanas_hechas || {}; let check = hechas[l.getTime()] ? '✅ ' : '';
             html += `<div style="display:flex; justify-content:space-between; margin-bottom:8px; ${esM && !check ? 'background: rgba(50, 215, 75, 0.15); padding: 6px 10px; border-radius: 8px; border-left: 3px solid #32d74b;' : 'padding: 6px 10px;'}"><span style="font-weight:600;">${a.nombre_zona}</span><span style="color:${esM && !check ? '#32d74b' : '#86868b'}; font-weight:${esM ? 'bold' : 'normal'};">${check}${esM ? '¡Te toca!' : a.leTocaA}</span></div>`;
         });
         cont.innerHTML += html + `</div>`;
@@ -587,7 +588,6 @@ document.getElementById('btnToggleCalendario').addEventListener('click', () => {
 });
 document.getElementById('btnMesAnterior').addEventListener('click', () => { fechaCalendario = new Date(fechaCalendario.getFullYear(), fechaCalendario.getMonth() - 1, 1); renderCalendarioMensual(); });
 document.getElementById('btnMesSiguiente').addEventListener('click', () => { fechaCalendario = new Date(fechaCalendario.getFullYear(), fechaCalendario.getMonth() + 1, 1); renderCalendarioMensual(); });
-
 
 // --- MÓDULO TABLÓN (INFO) ---
 function cargarTablon(tablon) {
@@ -645,14 +645,12 @@ function generarRankingGlobal() {
     
     let asignaciones = []; let yaAsignados = new Set();
 
-    // 1. Limpieza
     usuarios.forEach(u => {
         if (u.strikes >= 3) { asignaciones.push({ nombre: u.nombre, titulo: "El Cerdo del Piso", desc: "Acumula " + u.strikes + " tareas sin hacer. Debe ronda.", color: '#ff453a', emoji: "🐷" }); yaAsignados.add(u.nombre); }
         else if (u.strikes == 2 && !yaAsignados.has(u.nombre)) { asignaciones.push({ nombre: u.nombre, titulo: "Peligro Biológico", desc: "Lleva 2 tareas saltadas. Evita la escoba.", color: '#ff9f0a', emoji: "☣️" }); yaAsignados.add(u.nombre); }
         else if (u.strikes == 1 && !yaAsignados.has(u.nombre)) { asignaciones.push({ nombre: u.nombre, titulo: "El Remolón", desc: "Se ha saltado 1 tarea. Le vigilamos.", color: '#ffd60a', emoji: "🧹" }); yaAsignados.add(u.nombre); }
     });
 
-    // 2. Economía
     let sugar = porSaldo.find(u => u.saldo > 0.01 && !yaAsignados.has(u.nombre));
     if (sugar) { asignaciones.push({ nombre: sugar.nombre, titulo: "El Sugar Daddy", desc: "El banco central del piso. Todos le deben.", color: '#32d74b', emoji: "😎" }); yaAsignados.add(sugar.nombre); }
 
@@ -662,7 +660,6 @@ function generarRankingGlobal() {
     let inversor = porPagado.find(u => u.pagado > 0 && !yaAsignados.has(u.nombre));
     if (inversor) { asignaciones.push({ nombre: inversor.nombre, titulo: "El Inversor", desc: "Siempre paga primero. Dueño de todo.", color: '#0a84ff', emoji: "👑" }); yaAsignados.add(inversor.nombre); }
 
-    // 3. Relleno único
     let titulosExtra = [
         { t: "El 'Mañana te hago Bizum'", d: "Le cuesta soltar la pasta.", c: '#ff9f0a', e: "🐌" },
         { t: "El Santo Patrón", d: "Cuentas saneadas al 100%. Un ejemplo.", c: '#32d74b', e: "😇" },
