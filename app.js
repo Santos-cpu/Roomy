@@ -71,7 +71,7 @@ function getAvatar(nombre) {
 }
 
 function getColor(nombre) {
-    return window.coloresGrupo[nombre] || "#0a84ff"; 
+    return window.coloresGrupo[nombre] || "#0a84ff"; // Azul por defecto
 }
 
 // --- SISTEMA DE HISTORIAL DE ACTIVIDAD ---
@@ -333,7 +333,7 @@ async function mostrarDashboard(nombre, id) {
         window.coloresGrupo = datos.colores || {};
         
         document.getElementById('tituloDashboard').innerText = datos.nombre_piso;
-        document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombre)} <span style="color: ${getColor(nombre)}">${nombre}</span>`;
+        document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombre)} <span style="color: ${getColor(nombre)}; font-weight: bold;">${nombre}</span>`;
         participantesGrupo = datos.participantes;
         
         cargarTablon(datos.tablon || { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" });
@@ -983,7 +983,7 @@ window.renderFaltasPolicial = function() {
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <div style="font-size: 2.2em; filter: drop-shadow(0 0 5px ${color}88);">${getAvatar(infractor)}</div>
                     <div>
-                        <div style="font-family: monospace; font-weight: bold; color: #f5f5f7; font-size: 1.15em;">${infractor}</div>
+                        <div style="font-family: monospace; font-weight: bold; color: ${getColor(infractor)}; font-size: 1.15em;">${infractor}</div>
                         <div style="font-family: monospace; color: ${color}; font-size: 0.8em; letter-spacing: 0.5px;">[ ${nivel} ]</div>
                     </div>
                 </div>
@@ -1204,6 +1204,15 @@ document.getElementById('btnCopiarWifi').addEventListener('click', async () => {
 });
 
 // --- MÓDULO RANKING ---
+function generarHash(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash |= 0; 
+    }
+    return Math.abs(hash);
+}
+
 function generarRankingGlobal() {
     if (participantesGrupo.length === 0) return;
     const cont = document.getElementById('contenidoRanking');
@@ -1254,17 +1263,15 @@ function generarRankingGlobal() {
         { t: "El Monje Zen", d: "Inmune al drama y a las discusiones del piso.", c: '#bf5af2', e: "🧘" },
         { t: "El Chef de Air Fryer", d: "Hace desde torreznos hasta postres en la freidora de aire.", c: '#ff9f0a', e: "🍟" },
         { t: "El Gamer de Guardia", d: "Su PS5 hace más horas extra que un reloj.", c: '#0a84ff', e: "🎮" },
-        { t: "El Superviviente", d: "Se iría de vivac al monte antes que fregar los platos.", c: '#32d74b', e: "🏕️" },
-        { t: "El Cerdo del Piso", d: "Sabe que el polvo no pica.", c: '#ff453a', e: "🐷" },
-        { t: "Peligro Biológico", d: "Evita la escoba a toda costa.", c: '#ff9f0a', e: "☣️" },
-        { t: "El Remolón", d: "Limpiar hoy no, mañana.", c: '#ffd60a', e: "👀" }
+        { t: "El Superviviente", d: "Se iría de vivac al monte antes que fregar los platos.", c: '#32d74b', e: "🏕️" }
     ];
 
-    titulosExtra.sort(() => Math.random() - 0.5);
-    
     usuarios.forEach(u => {
         if (!yaAsignados.has(u.nombre)) {
-            let extra = titulosExtra.shift() || { t: "Usuario Genérico", d: "Sin datos destacables.", c: '#86868b', e: "👤" };
+            let semilla = u.nombre + u.saldo.toFixed(2) + u.pagado.toFixed(2) + u.strikes;
+            let indice = generarHash(semilla) % titulosExtra.length;
+            
+            let extra = titulosExtra.splice(indice, 1)[0] || { t: "Usuario Genérico", d: "Sin datos destacables.", c: '#86868b', e: "👤" };
             asignaciones.push({ nombre: u.nombre, titulo: extra.t, desc: extra.d, color: extra.c, emoji: extra.e });
             yaAsignados.add(u.nombre);
         }
@@ -1272,7 +1279,6 @@ function generarRankingGlobal() {
     
     let html = "";
     asignaciones.forEach(a => {
-        
         let warningBadge = ultimosStrikes[a.nombre] > 0 ? `<div style="font-size: 0.45em; display: inline-block; background: #ff453a; color: #fff; padding: 2px 6px; border-radius: 8px; vertical-align: middle; margin-left: 6px; font-weight: bold; letter-spacing: 0.5px;">🚨 ${ultimosStrikes[a.nombre]} FALTA${ultimosStrikes[a.nombre]>1?'S':''}</div>` : '';
         
         html += `
