@@ -39,7 +39,7 @@
         
         .item-lista { border-bottom: 1px solid #2c2c2e; padding: 14px 0; display: flex; justify-content: space-between; align-items: center; }
         .item-info { display: flex; flex-direction: column; flex: 1; padding-right: 10px; }
-        .item-titulo { font-weight: 600; font-size: 1.05em; word-break: break-word; color: #f5f5f7; }
+        .item-titulo { font-weight: 600; font-size: 1.05em; word-break: break-word; color: #f5f5f7; display: flex; align-items: center; gap: 6px; }
         .item-detalle { font-size: 0.85em; color: #86868b; margin-top: 4px; line-height: 1.3; }
         
         .checkbox-group { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
@@ -135,10 +135,14 @@
                         </div>
                     </div>
 
-                    <!-- Columna para Tablón y Campanita de Historial -->
+                    <!-- Columna para Tablón, Gráficos y Campanita -->
                     <div style="display: flex; flex-direction: column; gap: 6px;">
                         <button id="btnAbrirTablon" class="btn-header" style="font-size: 1.2em; padding: 0 12px; height: 36px; margin: 0;">📌</button>
-                        <button id="btnAbrirHistorial" class="btn-header" style="font-size: 1.2em; padding: 0 12px; height: 36px; margin: 0;">🔔</button>
+                        <div style="display: flex; gap: 6px;">
+                            <!-- NUEVO: Botón Gráficos -->
+                            <button id="btnAbrirGraficos" class="btn-header" style="font-size: 1.2em; padding: 0 12px; height: 36px; margin: 0; flex: 1;">📊</button>
+                            <button id="btnAbrirHistorial" class="btn-header" style="font-size: 1.2em; padding: 0 12px; height: 36px; margin: 0; flex: 1;">🔔</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -162,6 +166,14 @@
                     <h4 id="tituloFormGasto" style="margin-bottom: 20px;">Nuevo Gasto</h4>
                     <input type="text" id="conceptoGasto" placeholder="Concepto (Ej. Mercadona)">
                     <input type="number" id="importeGasto" placeholder="Importe total (€)" step="0.01" min="0">
+                    
+                    <!-- NUEVO: Categorías -->
+                    <label style="color: #86868b; font-size: 0.9em; display: block; margin-bottom: 10px;">Categoría:</label>
+                    <select id="categoriaGasto">
+                        <option value="🏠 Piso">🏠 Piso</option>
+                        <option value="💡 Facturas">💡 Facturas</option>
+                        <option value="🍻 Ocio">🍻 Ocio</option>
+                    </select>
                     
                     <label style="color: #86868b; font-size: 0.9em;">¿Quién ha pagado?</label>
                     <select id="pagadorGasto"></select>
@@ -330,6 +342,31 @@
                 <!-- Aquí se carga el historial de Firebase -->
             </div>
         </div>
+
+        <!-- NUEVO: VISTA ESPECIAL: GRÁFICOS -->
+        <div id="vistaGraficos" class="hidden" style="background: #000; position: absolute; top: 0; left: 0; width: 100%; min-height: 100%; z-index: 100; padding: 20px; box-sizing: border-box; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; padding-top: 10px; position: sticky; top: 0; background: #000; z-index: 101; padding-bottom: 10px;">
+                <h2 style="margin: 0; font-size: 1.5em; font-weight: 700;">📊 Gráficos</h2>
+                <button type="button" id="btnCerrarGraficos" style="background: #2c2c2e; color: #f5f5f7; border: none; padding: 8px 12px; border-radius: 12px; width: auto; margin: 0; font-weight: 600;">Cerrar</button>
+            </div>
+            
+            <div class="card" style="text-align: center; margin-bottom: 20px;">
+                <h4 style="margin-bottom: 15px;">Mis Gastos Por Categoría</h4>
+                <div style="position: relative; width: 100%; max-width: 250px; margin: 0 auto;">
+                    <canvas id="chartMisGastos"></canvas>
+                </div>
+                <p id="totalMisGastos" style="font-size: 1.2em; font-weight: bold; margin-top: 15px; color: #f5f5f7;"></p>
+            </div>
+            
+            <div class="card" style="text-align: center;">
+                <h4 style="margin-bottom: 15px;">Gastos Globales del Piso</h4>
+                <div style="position: relative; width: 100%; max-width: 250px; margin: 0 auto;">
+                    <canvas id="chartPisoGastos"></canvas>
+                </div>
+                <p id="totalPisoGastos" style="font-size: 1.2em; font-weight: bold; margin-top: 15px; color: #f5f5f7;"></p>
+            </div>
+        </div>
+
     </div>
 
     <!-- MODAL IOS -->
@@ -345,6 +382,8 @@
         </div>
     </div>
 
+    <!-- Chart.js para los gráficos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script type="module" src="app.js"></script>
 </body>
 </html>
