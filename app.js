@@ -1,29 +1,26 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, collection, addDoc, getDocs, query, orderBy, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
-// NUEVO: Importamos el motor de notificaciones Push
+import { getFirestore, doc, setDoc, getDoc, collection, addDoc, query, orderBy, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-messaging.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCGWAqi1MKJrlLNiCOIEztMu5qrNGbGtMA",
-  authDomain: "piso-app-11882.firebaseapp.com",
-  projectId: "piso-app-11882",
-  storageBucket: "piso-app-11882.firebasestorage.app",
-  messagingSenderId: "897201846594",
-  appId: "1:897201846594:web:eb7df0b778ee8350eff0db"
+    apiKey: "AIzaSyCGWAqi1MKJrlLNiCOIEztMu5qrNGbGtMA",
+    authDomain: "piso-app-11882.firebaseapp.com",
+    projectId: "piso-app-11882",
+    storageBucket: "piso-app-11882.firebasestorage.app",
+    messagingSenderId: "897201846594",
+    appId: "1:897201846594:web:eb7df0b778ee8350eff0db"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const messaging = getMessaging(app); // Inicializamos Mensajería
+const messaging = getMessaging(app);
 
-// Función para pedir permiso y guardar el dispositivo para las Push
 async function activarNotificacionesPush() {
     try {
         const permiso = await Notification.requestPermission();
         if (permiso === 'granted') {
             const token = await getToken(messaging, { vapidKey: "BMwN91jpJDw5pzlQB2syEMaK0ooR7893Dv880j2LRKM4ENlZES0cSLjot2M08vIq7qxGC9ZwIud8uySMBGXcZfs" });
             if (token) {
-                // Guardamos el token en Firestore bajo el nombre del usuario
                 await setDoc(doc(db, "grupos", idPisoActual, "tokens_push", nombreUsuario), {
                     token: token,
                     actualizado: new Date().toISOString()
@@ -33,50 +30,45 @@ async function activarNotificacionesPush() {
     } catch (error) { console.log("Notificaciones bloqueadas o no soportadas en este navegador."); }
 }
 
-let participantesGrupo = []; 
+let participantesGrupo = [];
 let idPisoActual = "";
 let nombreUsuario = "";
-let nombresNuevos = []; 
-
+let nombresNuevos = [];
 let idGastoEditando = null;
 let idZonaEditando = null;
-let zonasLimpiezaCache = []; 
-let fechaCalendario = new Date(); 
-
+let zonasLimpiezaCache = [];
+let fechaCalendario = new Date();
 let misPisos = JSON.parse(localStorage.getItem('misPisos_v2')) || [];
 let ultimoPisoActivo = localStorage.getItem('ultimoPisoActivo');
-
-// NUEVO: Controladores para cerrar conexiones en tiempo real
 let unsubGastos = null;
 let unsubCompra = null;
 let unsubLimpieza = null;
-
 let ultimosGastos = [];
 let ultimosBalances = {};
 let ultimosStrikes = {};
 
-// --- SISTEMA DE MODALES ---
 window.mostrarModal = function({ titulo, mensaje, tipo = 'alert', valorInput = '' }) {
     return new Promise((resolve) => {
         const overlay = document.getElementById('iosModalOverlay'); const box = document.getElementById('iosModalBox');
         const titleEl = document.getElementById('iosModalTitle'); const msgEl = document.getElementById('iosModalMessage');
         const inputEl = document.getElementById('iosModalInput'); const btnCancel = document.getElementById('iosModalBtnCancel');
         const btnConfirm = document.getElementById('iosModalBtnConfirm');
-
+        
         titleEl.innerText = titulo; msgEl.innerText = mensaje;
         inputEl.classList.add('hidden'); btnCancel.classList.add('hidden');
         inputEl.value = valorInput; inputEl.type = (titulo.toLowerCase().includes('precio') || titulo.toLowerCase().includes('importe')) ? 'number' : 'text';
-
+        
         if (tipo === 'confirm' || tipo === 'prompt') btnCancel.classList.remove('hidden');
         if (tipo === 'prompt') inputEl.classList.remove('hidden');
-
+        
         overlay.classList.add('active');
         const close = () => { overlay.classList.remove('active'); btnConfirm.onclick = null; btnCancel.onclick = null; };
-
+        
         btnConfirm.onclick = () => { close(); if (tipo === 'prompt') resolve(inputEl.value); else resolve(true); };
         btnCancel.onclick = () => { close(); if (tipo === 'prompt') resolve(null); else resolve(false); };
     });
 };
+
 window.mostrarAlerta = (t, m) => window.mostrarModal({titulo: t, mensaje: m, tipo: 'alert'});
 window.mostrarConfirmacion = (t, m) => window.mostrarModal({titulo: t, mensaje: m, tipo: 'confirm'});
 window.mostrarPrompt = (t, m, val) => window.mostrarModal({titulo: t, mensaje: m, tipo: 'prompt', valorInput: val});
@@ -89,49 +81,61 @@ const pantallaDashboard = document.getElementById('pantallaDashboard');
 async function iniciarApp() {
     const urlParams = new URLSearchParams(window.location.search);
     const pisoIdUrl = urlParams.get('id');
-
-    if (pisoIdUrl) { document.body.classList.add('pantalla-centrada'); pantallaUnirse.classList.remove('hidden'); await cargarPantallaUnirse(pisoIdUrl); return; }
+    if (pisoIdUrl) { 
+        document.body.classList.add('pantalla-centrada'); 
+        pantallaUnirse.classList.remove('hidden'); 
+        await cargarPantallaUnirse(pisoIdUrl); 
+        return; 
+    }
     if (ultimoPisoActivo) {
         const pisoGuardado = misPisos.find(p => p.id === ultimoPisoActivo);
-        if (pisoGuardado) { document.body.classList.remove('pantalla-centrada'); nombreUsuario = pisoGuardado.nombreUsuario; idPisoActual = pisoGuardado.id; mostrarDashboard(nombreUsuario, idPisoActual); return; }
+        if (pisoGuardado) { 
+            document.body.classList.remove('pantalla-centrada'); 
+            nombreUsuario = pisoGuardado.nombreUsuario; 
+            idPisoActual = pisoGuardado.id; 
+            mostrarDashboard(nombreUsuario, idPisoActual); 
+            return; 
+        }
     }
-    if (misPisos.length > 0) { document.body.classList.add('pantalla-centrada'); mostrarPantallaMisPisos(); } 
-    else { document.body.classList.add('pantalla-centrada'); pantallaCrear.classList.remove('hidden'); }
+    if (misPisos.length > 0) { 
+        document.body.classList.add('pantalla-centrada'); 
+        mostrarPantallaMisPisos(); 
+    } else { 
+        document.body.classList.add('pantalla-centrada'); 
+        pantallaCrear.classList.remove('hidden'); 
+    }
 }
 
 function mostrarPantallaMisPisos() {
-    pantallaMisPisos.classList.remove('hidden'); 
+    pantallaMisPisos.classList.remove('hidden');
     pantallaCrear.classList.add('hidden');
     document.getElementById('btnCancelarCrear').classList.remove('hidden');
-    const div = document.getElementById('listaMisPisos'); 
+    const div = document.getElementById('listaMisPisos');
     div.innerHTML = '';
     
     if (misPisos.length === 0) {
         div.innerHTML = '<p style="color: #86868b; text-align: center; margin-bottom: 20px;">No tienes ningún piso guardado.</p>';
         return;
     }
-
+    
     misPisos.forEach((piso, index) => {
-        // Contenedor en línea para el botón del piso y la papelera
         const fila = document.createElement('div');
         fila.style.cssText = "display: flex; gap: 10px; align-items: center; margin-bottom: 12px;";
-
-        const btn = document.createElement('button'); 
+        const btn = document.createElement('button');
         btn.className = 'btn-piso';
-        btn.style.margin = "0"; 
+        btn.style.margin = "0";
         btn.style.flex = "1";
         btn.innerHTML = `${piso.nombrePiso} <br><small style="font-weight:600; font-size:0.85em; color: rgba(0,0,0,0.65); display: block; margin-top: 4px;">👤 Entrar como ${piso.nombreUsuario}</small>`;
         
         btn.onclick = () => {
-            document.body.classList.remove('pantalla-centrada'); 
+            document.body.classList.remove('pantalla-centrada');
             pantallaMisPisos.classList.add('hidden');
-            localStorage.setItem('ultimoPisoActivo', piso.id); 
-            nombreUsuario = piso.nombreUsuario; 
-            idPisoActual = piso.id; 
+            localStorage.setItem('ultimoPisoActivo', piso.id);
+            nombreUsuario = piso.nombreUsuario;
+            idPisoActual = piso.id;
             mostrarDashboard(piso.nombreUsuario, piso.id);
         };
-
-        // Botón de eliminar (Papelera)
+        
         const btnEliminar = document.createElement('button');
         btnEliminar.innerHTML = "🗑️";
         btnEliminar.title = "Eliminar piso de la lista";
@@ -140,26 +144,18 @@ function mostrarPantallaMisPisos() {
         btnEliminar.onclick = async () => {
             const seguro = await window.mostrarConfirmacion("Eliminar piso", `¿Seguro que quieres borrar "${piso.nombrePiso}" de tus pisos guardados?`);
             if (seguro) {
-                // Borramos de la lista local
                 misPisos.splice(index, 1);
                 localStorage.setItem('misPisos_v2', JSON.stringify(misPisos));
-                
-                // Si borramos el que estaba activo por defecto, limpiamos
                 if (localStorage.getItem('ultimoPisoActivo') === piso.id) {
                     localStorage.removeItem('ultimoPisoActivo');
                 }
-                
-                // Recargamos la pantalla de pisos
                 mostrarPantallaMisPisos();
-                
-                // Si ya no quedan pisos, mandamos a la pantalla de crear
                 if (misPisos.length === 0) {
                     pantallaMisPisos.classList.add('hidden');
                     pantallaCrear.classList.remove('hidden');
                 }
             }
         };
-
         fila.appendChild(btn);
         fila.appendChild(btnEliminar);
         div.appendChild(fila);
@@ -169,39 +165,82 @@ function mostrarPantallaMisPisos() {
 document.getElementById('btnIrCrearPiso').addEventListener('click', () => { pantallaMisPisos.classList.add('hidden'); pantallaCrear.classList.remove('hidden'); });
 document.getElementById('btnCancelarCrear').addEventListener('click', () => { pantallaCrear.classList.add('hidden'); pantallaMisPisos.classList.remove('hidden'); });
 
-document.getElementById('btnAñadirNombre').addEventListener('click', () => {
-    const input = document.getElementById('inputNuevoNombre'); const nombre = input.value.trim();
-    if (nombre && !nombresNuevos.includes(nombre)) { nombresNuevos.push(nombre); actualizarListaNuevosNombres(); input.value = ''; }
-});
-function actualizarListaNuevosNombres() {
-    const contenedor = document.getElementById('contenedorNuevosNombres'); contenedor.innerHTML = '';
-    nombresNuevos.forEach((nombre, index) => { contenedor.innerHTML += `<div class="tag-nombre"><span>👤 ${nombre}</span><span class="tag-eliminar" onclick="quitarNombre(${index})">✕</span></div>`; });
+async function procesarEnlaceInvitacion() {
+    const enlace = await window.mostrarPrompt("Unirse a un piso", "Pega aquí el enlace que te han pasado por WhatsApp:");
+    if (enlace) {
+        let idToJoin = enlace.trim();
+        if (idToJoin.includes('?id=')) {
+            idToJoin = idToJoin.split('?id=')[1].split('&')[0];
+        }
+        if (idToJoin) {
+            document.body.classList.add('pantalla-centrada');
+            pantallaMisPisos.classList.add('hidden');
+            pantallaCrear.classList.add('hidden');
+            pantallaUnirse.classList.remove('hidden');
+            await cargarPantallaUnirse(idToJoin);
+        }
+    }
 }
-window.quitarNombre = function(index) { nombresNuevos.splice(index, 1); actualizarListaNuevosNombres(); };
+document.getElementById('btnIrUnirsePiso').addEventListener('click', procesarEnlaceInvitacion);
+document.getElementById('btnIrUnirsePiso2').addEventListener('click', procesarEnlaceInvitacion);
+
+document.getElementById('btnAñadirNombre').addEventListener('click', () => {
+    const input = document.getElementById('inputNuevoNombre');
+    const nombre = input.value.trim();
+    if (nombre && !nombresNuevos.includes(nombre)) { 
+        nombresNuevos.push(nombre); 
+        actualizarListaNuevosNombres(); 
+        input.value = ''; 
+    }
+});
+
+function actualizarListaNuevosNombres() {
+    const contenedor = document.getElementById('contenedorNuevosNombres'); 
+    contenedor.innerHTML = '';
+    nombresNuevos.forEach((nombre, index) => { 
+        contenedor.innerHTML += `<div class="tag-nombre"><span>👤 ${nombre}</span><span class="tag-eliminar" onclick="quitarNombre(${index})">❌</span></div>`; 
+    });
+}
+
+window.quitarNombre = function(index) { 
+    nombresNuevos.splice(index, 1); 
+    actualizarListaNuevosNombres(); 
+};
 
 document.getElementById('btnCrear').addEventListener('click', async () => {
-    const nombrePiso = document.getElementById('nombrePiso').value; const boton = document.getElementById('btnCrear');
+    const nombrePiso = document.getElementById('nombrePiso').value; 
+    const boton = document.getElementById('btnCrear');
     if (!nombrePiso || nombresNuevos.length === 0) return await window.mostrarAlerta("Datos incompletos", "Escribe el nombre del piso y añade al menos a un inquilino.");
+    
     boton.innerText = "Creando..."; boton.disabled = true;
     const idUnico = 'piso-' + Math.random().toString(36).substring(2, 8);
     const tablonInicial = { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" };
+    
     try {
         await setDoc(doc(db, "grupos", idUnico), { id: idUnico, nombre_piso: nombrePiso, creador: nombresNuevos[0], participantes: nombresNuevos, tablon: tablonInicial, fecha_creacion: new Date().toISOString() });
         pantallaCrear.classList.add('hidden'); pantallaUnirse.classList.remove('hidden');
         document.getElementById('nombrePiso').value = ""; nombresNuevos = []; actualizarListaNuevosNombres();
         await cargarPantallaUnirse(idUnico);
-    } catch (error) { await window.mostrarAlerta("Error", "No se pudo guardar."); } finally { boton.innerText = "Crear Piso"; boton.disabled = false; }
+    } catch (error) { 
+        await window.mostrarAlerta("Error", "No se pudo guardar."); 
+    } finally { 
+        boton.innerText = "Crear Piso"; boton.disabled = false; 
+    }
 });
 
 async function cargarPantallaUnirse(id) {
     try {
         const docSnap = await getDoc(doc(db, "grupos", id));
         if (docSnap.exists()) {
-            const datosPiso = docSnap.data(); document.getElementById('tituloUnirse').innerText = `🏡 ${datosPiso.nombre_piso}`;
-            const listaNombres = document.getElementById('listaNombres'); listaNombres.innerHTML = ''; 
+            const datosPiso = docSnap.data(); 
+            document.getElementById('tituloUnirse').innerText = `🏠 ${datosPiso.nombre_piso}`;
+            const listaNombres = document.getElementById('listaNombres'); 
+            listaNombres.innerHTML = ''; 
             datosPiso.participantes.forEach(nombre => {
-                const btn = document.createElement('button'); btn.innerText = nombre; btn.className = 'btn-name';
-                btn.onclick = () => unirseYGuardar(nombre, id, datosPiso.nombre_piso); listaNombres.appendChild(btn);
+                const btn = document.createElement('button'); 
+                btn.innerText = nombre; btn.className = 'btn-name';
+                btn.onclick = () => unirseYGuardar(nombre, id, datosPiso.nombre_piso); 
+                listaNombres.appendChild(btn);
             });
         } else { document.getElementById('tituloUnirse').innerText = "❌ Piso no existe"; }
     } catch (error) { document.getElementById('tituloUnirse').innerText = "Error de conexión"; }
@@ -210,9 +249,11 @@ async function cargarPantallaUnirse(id) {
 function unirseYGuardar(nombre, id, nombrePiso) {
     misPisos = misPisos.filter(piso => piso.id !== id);
     misPisos.push({ id: id, nombrePiso: nombrePiso, nombreUsuario: nombre });
-    localStorage.setItem('misPisos_v2', JSON.stringify(misPisos)); localStorage.setItem('ultimoPisoActivo', id);
+    localStorage.setItem('misPisos_v2', JSON.stringify(misPisos)); 
+    localStorage.setItem('ultimoPisoActivo', id);
     nombreUsuario = nombre; idPisoActual = id;
-    pantallaUnirse.classList.add('hidden'); document.body.classList.remove('pantalla-centrada');
+    pantallaUnirse.classList.add('hidden'); 
+    document.body.classList.remove('pantalla-centrada');
     window.history.pushState({}, document.title, window.location.pathname);
     mostrarDashboard(nombre, id);
 }
@@ -228,25 +269,19 @@ async function mostrarDashboard(nombre, id) {
         
         cargarTablon(datos.tablon || { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" });
         
-        // Arrancamos los Listeners en TIEMPO REAL
         cargarListaGastos();
         cargarListaLimpieza();
         cargarListaCompra();
         
-        // Pedir permiso notificaciones Push
         activarNotificacionesPush();
     }
 }
 
-// CAMBIAR DE USUARIO (Corregido para no borrar el piso de la lista)
 document.getElementById('btnCambiarUsuario').addEventListener('click', async () => {
     const seguro = await window.mostrarConfirmacion("Cambiar de perfil", "¿Te has equivocado de nombre? Volverás a la selección de nombres.");
     if (seguro) {
         if(unsubGastos) unsubGastos(); if(unsubCompra) unsubCompra(); if(unsubLimpieza) unsubLimpieza();
-        
-        // NO borramos el piso de misPisos, solo quitamos el activo temporalmente
         localStorage.removeItem('ultimoPisoActivo');
-        
         document.getElementById('pantallaDashboard').classList.add('hidden');
         document.body.classList.add('pantalla-centrada');
         document.getElementById('pantallaUnirse').classList.remove('hidden');
@@ -267,15 +302,21 @@ document.getElementById('btnEditarNombrePiso').addEventListener('click', async (
 
 document.getElementById('btnCopiarEnlace').addEventListener('click', async () => {
     const enlace = `${window.location.origin}${window.location.pathname}?id=${idPisoActual}`;
-    try { await navigator.clipboard.writeText(enlace); await window.mostrarAlerta("Enlace copiado", "¡Pásalo por WhatsApp a tus compañeros!"); } 
-    catch (e) { await window.mostrarAlerta("Error al copiar", "Cópialo manualmente: \n\n" + enlace); }
+    try { 
+        await navigator.clipboard.writeText(enlace); 
+        await window.mostrarAlerta("Enlace copiado", "¡Pásalo por WhatsApp a tus compañeros!"); 
+    } catch (e) { 
+        await window.mostrarAlerta("Error al copiar", "Cópialo manualmente: \n\n" + enlace); 
+    }
 });
 
 function activarPestaña(idTab, idVista) {
     ['tabGastos', 'tabCompra', 'tabLimpieza', 'tabRanking'].forEach(t => document.getElementById(t).classList.remove('active'));
     ['vistaGastos', 'vistaCompra', 'vistaLimpieza', 'vistaRanking'].forEach(v => document.getElementById(v).classList.add('hidden'));
-    document.getElementById(idTab).classList.add('active'); document.getElementById(idVista).classList.remove('hidden');
+    document.getElementById(idTab).classList.add('active'); 
+    document.getElementById(idVista).classList.remove('hidden');
 }
+
 document.getElementById('tabGastos').addEventListener('click', () => activarPestaña('tabGastos', 'vistaGastos'));
 document.getElementById('tabCompra').addEventListener('click', () => activarPestaña('tabCompra', 'vistaCompra'));
 document.getElementById('tabLimpieza').addEventListener('click', () => activarPestaña('tabLimpieza', 'vistaLimpieza'));
@@ -292,14 +333,29 @@ function resetFormGasto() {
     document.getElementById('tipoDivisionGasto').value = 'iguales'; prepararFormularioGastos();
 }
 
-document.getElementById('btnMostrarFormGasto').addEventListener('click', () => { resetFormGasto(); document.getElementById('formGasto').classList.remove('hidden'); document.getElementById('btnMostrarFormGasto').classList.add('hidden'); });
-document.getElementById('btnCancelarGasto').addEventListener('click', () => { document.getElementById('formGasto').classList.add('hidden'); document.getElementById('btnMostrarFormGasto').classList.remove('hidden'); });
+document.getElementById('btnMostrarFormGasto').addEventListener('click', () => {
+    resetFormGasto(); document.getElementById('formGasto').classList.remove('hidden'); document.getElementById('btnMostrarFormGasto').classList.add('hidden');
+});
+
+document.getElementById('btnCancelarGasto').addEventListener('click', () => {
+    document.getElementById('formGasto').classList.add('hidden'); document.getElementById('btnMostrarFormGasto').classList.remove('hidden');
+});
+
 document.getElementById('tipoDivisionGasto').addEventListener('change', prepararFormularioGastos);
 
 function prepararFormularioGastos(gastoObj = null) {
     const selectPagador = document.getElementById('pagadorGasto'); const divInvolucrados = document.getElementById('involucradosGasto');
     const tipoDiv = document.getElementById('tipoDivisionGasto').value; const infoManual = document.getElementById('infoDivisionManual');
-    if(!gastoObj) { selectPagador.innerHTML = ''; participantesGrupo.forEach(p => { const opt = document.createElement('option'); opt.value = p; opt.innerText = p; if (p === nombreUsuario) opt.selected = true; selectPagador.appendChild(opt); }); }
+    
+    if(!gastoObj) { 
+        selectPagador.innerHTML = ''; 
+        participantesGrupo.forEach(p => { 
+            const opt = document.createElement('option'); opt.value = p; opt.innerText = p; 
+            if (p === nombreUsuario) opt.selected = true; 
+            selectPagador.appendChild(opt); 
+        }); 
+    }
+    
     divInvolucrados.innerHTML = '';
     if (tipoDiv === 'iguales') {
         infoManual.classList.add('hidden');
@@ -327,7 +383,7 @@ function calcularFaltanteManual() {
     const info = document.getElementById('infoDivisionManual'); const dif = total - sumaParcial;
     if (dif > 0.001) info.innerHTML = `Faltan por asignar: <b>${dif.toFixed(2)}€</b> (Se auto-rellenará)`;
     else if (dif < -0.001) info.innerHTML = `<span style="color:#ff453a;">Has asignado <b>${Math.abs(dif).toFixed(2)}€</b> de más.</span>`;
-    else info.innerHTML = `<span style="color:#32d74b;">Cuadrado perfecto ✔️</span>`;
+    else info.innerHTML = `<span style="color:#32d74b;">Cuadrado perfecto ✅</span>`;
 }
 
 window.abrirEditarGasto = function(gastoObj) {
@@ -351,7 +407,9 @@ document.getElementById('btnEliminarGasto').addEventListener('click', async () =
 document.getElementById('btnGuardarGasto').addEventListener('click', async () => {
     const concepto = document.getElementById('conceptoGasto').value; const importe = parseFloat(document.getElementById('importeGasto').value);
     const pagador = document.getElementById('pagadorGasto').value; const tipo = document.getElementById('tipoDivisionGasto').value;
+    
     if (!concepto || isNaN(importe)) return await window.mostrarAlerta("Datos incompletos", "Rellena el concepto y el importe.");
+    
     let involucradosData = [];
     if (tipo === 'iguales') {
         const cbs = document.querySelectorAll('.gasto-cb:checked');
@@ -372,6 +430,7 @@ document.getElementById('btnGuardarGasto').addEventListener('click', async () =>
             inputsVacios.forEach(nombre => { involucradosData.push({ nombre: nombre, importe: aCadaVacio }); });
         }
     }
+    
     const boton = document.getElementById('btnGuardarGasto'); boton.innerText = "Guardando..."; boton.disabled = true;
     const datosGasto = { concepto: concepto, importe: importe, pagador: pagador, involucrados: involucradosData };
     try {
@@ -386,7 +445,6 @@ function cargarListaGastos() {
     const q = query(collection(db, "grupos", idPisoActual, "gastos"), orderBy("fecha", "desc"));
     const listaHtml = document.getElementById('listaGastos');
     
-    // TIEMPO REAL: onSnapshot
     unsubGastos = onSnapshot(q, (querySnapshot) => {
         ultimosGastos = [];
         if (querySnapshot.empty) {
@@ -464,7 +522,6 @@ function cargarListaCompra() {
     const q = query(collection(db, "grupos", idPisoActual, "compra"), orderBy("fecha", "asc"));
     const listaHtml = document.getElementById('listaArticulos');
     
-    // TIEMPO REAL: onSnapshot
     unsubCompra = onSnapshot(q, (querySnapshot) => {
         if (querySnapshot.empty) { listaHtml.innerHTML = '<p style="color:#86868b; text-align:center;">Lista vacía.</p>'; document.getElementById('btnComprarSeleccionados').disabled = true; return; }
         document.getElementById('btnComprarSeleccionados').disabled = false; listaHtml.innerHTML = '';
@@ -474,6 +531,7 @@ function cargarListaCompra() {
         });
     });
 }
+
 window.borrarArticulo = async function(id) { await deleteDoc(doc(db, "grupos", idPisoActual, "compra", id)); };
 
 document.getElementById('btnComprarSeleccionados').addEventListener('click', async () => {
@@ -501,8 +559,13 @@ function resetFormZona() {
     participantesGrupo.forEach(p => div.innerHTML += `<label><input type="checkbox" value="${p}" checked> ${p}</label>`);
 }
 
-document.getElementById('btnMostrarFormZona').addEventListener('click', () => { resetFormZona(); document.getElementById('formZona').classList.remove('hidden'); document.getElementById('btnMostrarFormZona').classList.add('hidden'); });
-document.getElementById('btnCancelarZona').addEventListener('click', () => { document.getElementById('formZona').classList.add('hidden'); document.getElementById('btnMostrarFormZona').classList.remove('hidden'); });
+document.getElementById('btnMostrarFormZona').addEventListener('click', () => {
+    resetFormZona(); document.getElementById('formZona').classList.remove('hidden'); document.getElementById('btnMostrarFormZona').classList.add('hidden');
+});
+
+document.getElementById('btnCancelarZona').addEventListener('click', () => {
+    document.getElementById('formZona').classList.add('hidden'); document.getElementById('btnMostrarFormZona').classList.remove('hidden');
+});
 
 window.abrirEditarZona = function(idZona) {
     const zonaObj = zonasLimpiezaCache.find(z => z.id === idZona); if(!zonaObj) return;
@@ -521,7 +584,10 @@ document.getElementById('btnEliminarZona').addEventListener('click', async () =>
     try { await deleteDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZonaEditando)); document.getElementById('btnCancelarZona').click(); } catch (e) { await window.mostrarAlerta("Error", "No se pudo borrar."); }
 });
 
-function obtenerLunes(fecha) { let d = new Date(fecha); let day = d.getDay(); let diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(d.setDate(diff)).setHours(0,0,0,0); }
+function obtenerLunes(fecha) {
+    let d = new Date(fecha); let day = d.getDay(); let diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(d.setDate(diff)).setHours(0,0,0,0);
+}
 
 document.getElementById('btnGuardarZona').addEventListener('click', async () => {
     const nombreZona = document.getElementById('nombreZona').value; const btn = document.getElementById('btnGuardarZona');
@@ -545,7 +611,6 @@ function cargarListaLimpieza() {
     if (unsubLimpieza) unsubLimpieza();
     const q = query(collection(db, "grupos", idPisoActual, "zonas_limpieza"));
     
-    // TIEMPO REAL: onSnapshot
     unsubLimpieza = onSnapshot(q, (snap) => {
         zonasLimpiezaCache = [];
         if (!snap.empty) { snap.forEach(d => { const z = d.data(); z.id = d.id; zonasLimpiezaCache.push(z); }); zonasLimpiezaCache.sort((a, b) => a.nombre_zona.localeCompare(b.nombre_zona)); }
@@ -572,7 +637,6 @@ function cargarListaLimpieza() {
                 setTimeout(() => { window.mostrarAlerta("⚠️ ALERTA DE INSALUBRIDAD", "Los siguientes inquilinos llevan 3 o más tareas de limpieza sin hacer y deben una ronda al piso:\n\n" + morososLimpieza.join("\n")); }, 1000);
             }
         }
-
         renderVistaSemanaActual(); renderCalendarioMensual(); generarRankingGlobal();
     });
 }
@@ -583,7 +647,6 @@ function calcularAsignacionesParaSemana(fechaLunes) {
         const freq = zona.frecuencia || 1;
         let sem = Math.floor((fechaLunes.getTime() - new Date(zona.fecha_base).getTime()) / 604800000); 
         if (sem < 0 || sem % freq !== 0) return;
-
         let periodos = Math.floor(sem / freq);
         let idIdeal = (periodos + i) % zona.responsables.length; let toca = zona.responsables[idIdeal]; let libre = false;
         for (let j = 0; j < zona.responsables.length; j++) {
@@ -612,7 +675,6 @@ function renderVistaSemanaActual() {
         if (estaHecha) { botonHTML = `<span style="color:#32d74b; font-weight:bold; font-size:0.9em;">✅ Completada</span>`; } 
         else if (esMi) { botonHTML = `<button type="button" class="btn-bizum" onclick="marcarLimpieza('${a.idZona}', ${tsActual})">Confirmar</button>`; }
         else { botonHTML = `<span style="color:#86868b; font-size:0.9em;">Pendiente...</span>`; }
-
         list.innerHTML += `
             <div class="item-lista ${esMi && !estaHecha ? 'mi-turno' : ''}">
                 <div class="item-info">
@@ -644,7 +706,7 @@ function renderCalendarioMensual() {
         const asigsSem = calcularAsignacionesParaSemana(l);
         if(asigsSem.length === 0) return;
         
-        let html = `<div style="background:#1c1c1e; border:${esHoy ? '2px solid #32d74b' : '1px solid #2c2c2e'}; border-radius:12px; padding:14px; margin-bottom:15px;"><h5 style="color:#0a84ff; border-bottom:1px solid #2c2c2e; padding-bottom:8px; font-size:1em;">📅 Del ${l.getDate()} ${nombres[l.getMonth()].substring(0,3)} al ${dom.getDate()} ${nombres[dom.getMonth()].substring(0,3)} ${esHoy ? '<span style="background:#32d74b; color:#000; padding:2px 6px; border-radius:10px; font-size:0.7em; margin-left:5px;">Actual</span>' : ''}</h5>`;
+        let html = `<div style="background:#1c1c1e; border:${esHoy ? '2px solid #32d74b' : '1px solid #2c2c2e'}; border-radius:12px; padding:14px; margin-bottom:15px;"><h5 style="color:#0a84ff; border-bottom:1px solid #2c2c2e; padding-bottom:8px; font-size:1em;">🗓️ Del ${l.getDate()} ${nombres[l.getMonth()].substring(0,3)} al ${dom.getDate()} ${nombres[dom.getMonth()].substring(0,3)} ${esHoy ? '<span style="background:#32d74b; color:#000; padding:2px 6px; border-radius:10px; font-size:0.7em; margin-left:5px;">Actual</span>' : ''}</h5>`;
         asigsSem.forEach(a => {
             const esM = a.leTocaA === nombreUsuario; let hechas = a.zonaRef.semanas_hechas || {}; let check = hechas[l.getTime()] ? '✅ ' : '';
             html += `<div style="display:flex; justify-content:space-between; margin-bottom:8px; ${esM && !check ? 'background: rgba(50, 215, 75, 0.15); padding: 6px 10px; border-radius: 8px; border-left: 3px solid #32d74b;' : 'padding: 6px 10px;'}"><span style="font-weight:600;">${a.nombre_zona}</span><span style="color:${esM && !check ? '#32d74b' : '#86868b'}; font-weight:${esM ? 'bold' : 'normal'};">${check}${esM ? '¡Te toca!' : a.leTocaA}</span></div>`;
@@ -652,10 +714,12 @@ function renderCalendarioMensual() {
         cont.innerHTML += html + `</div>`;
     });
 }
+
 document.getElementById('btnToggleCalendario').addEventListener('click', () => {
     const c = document.getElementById('calendarioMensual'); const s = document.getElementById('listaLimpieza'); const b = document.getElementById('btnToggleCalendario');
-    if (c.classList.contains('hidden')) { c.classList.remove('hidden'); s.classList.add('hidden'); b.innerText = "Ver Semana"; } else { c.classList.add('hidden'); s.classList.remove('hidden'); b.innerText = "📅 Ver Mes"; }
+    if (c.classList.contains('hidden')) { c.classList.remove('hidden'); s.classList.add('hidden'); b.innerText = "📅 Ver Semana"; } else { c.classList.add('hidden'); s.classList.remove('hidden'); b.innerText = "📅 Ver Mes"; }
 });
+
 document.getElementById('btnMesAnterior').addEventListener('click', () => { fechaCalendario = new Date(fechaCalendario.getFullYear(), fechaCalendario.getMonth() - 1, 1); renderCalendarioMensual(); });
 document.getElementById('btnMesSiguiente').addEventListener('click', () => { fechaCalendario = new Date(fechaCalendario.getFullYear(), fechaCalendario.getMonth() + 1, 1); renderCalendarioMensual(); });
 
@@ -670,7 +734,7 @@ function cargarTablon(tablon) {
     document.getElementById('inputWifiPass').value = tablon.wifi_pass || "";
     document.getElementById('inputIban').value = tablon.iban || "";
     document.getElementById('inputNotasTablon').value = tablon.notas || "";
-
+    
     const qrContainer = document.getElementById('contenedorQR'); const qrImg = document.getElementById('imgWifiQR');
     if (tablon.wifi_nombre && tablon.wifi_pass) {
         const wifiString = `WIFI:S:${tablon.wifi_nombre};T:WPA;P:${tablon.wifi_pass};;`;
@@ -714,34 +778,33 @@ function generarRankingGlobal() {
     let porPagado = [...usuarios].sort((a,b) => b.pagado - a.pagado);
     
     let asignaciones = []; let yaAsignados = new Set();
-
     usuarios.forEach(u => {
         if (u.strikes >= 3) { asignaciones.push({ nombre: u.nombre, titulo: "El Cerdo del Piso", desc: "Acumula " + u.strikes + " tareas sin hacer. Debe ronda.", color: '#ff453a', emoji: "🐷" }); yaAsignados.add(u.nombre); }
         else if (u.strikes == 2 && !yaAsignados.has(u.nombre)) { asignaciones.push({ nombre: u.nombre, titulo: "Peligro Biológico", desc: "Lleva 2 tareas saltadas. Evita la escoba.", color: '#ff9f0a', emoji: "☣️" }); yaAsignados.add(u.nombre); }
-        else if (u.strikes == 1 && !yaAsignados.has(u.nombre)) { asignaciones.push({ nombre: u.nombre, titulo: "El Remolón", desc: "Se ha saltado 1 tarea. Le vigilamos.", color: '#ffd60a', emoji: "🧹" }); yaAsignados.add(u.nombre); }
+        else if (u.strikes == 1 && !yaAsignados.has(u.nombre)) { asignaciones.push({ nombre: u.nombre, titulo: "El Remolón", desc: "Se ha saltado 1 tarea. Le vigilamos.", color: '#ffd60a', emoji: "👀" }); yaAsignados.add(u.nombre); }
     });
-
+    
     let sugar = porSaldo.find(u => u.saldo > 0.01 && !yaAsignados.has(u.nombre));
-    if (sugar) { asignaciones.push({ nombre: sugar.nombre, titulo: "El Sugar Daddy", desc: "El banco central del piso. Todos le deben.", color: '#32d74b', emoji: "😎" }); yaAsignados.add(sugar.nombre); }
-
+    if (sugar) { asignaciones.push({ nombre: sugar.nombre, titulo: "El Sugar Daddy", desc: "El banco central del piso. Todos le deben.", color: '#32d74b', emoji: "🤑" }); yaAsignados.add(sugar.nombre); }
+    
     let moroso = [...porSaldo].reverse().find(u => u.saldo < -0.01 && !yaAsignados.has(u.nombre));
-    if (moroso) { asignaciones.push({ nombre: moroso.nombre, titulo: "Peligro Financiero", desc: "Cobradores del frac en camino.", color: '#ff453a', emoji: "🤡" }); yaAsignados.add(moroso.nombre); }
-
+    if (moroso) { asignaciones.push({ nombre: moroso.nombre, titulo: "Peligro Financiero", desc: "Cobradores del frac en camino.", color: '#ff453a', emoji: "💸" }); yaAsignados.add(moroso.nombre); }
+    
     let inversor = porPagado.find(u => u.pagado > 0 && !yaAsignados.has(u.nombre));
-    if (inversor) { asignaciones.push({ nombre: inversor.nombre, titulo: "El Inversor", desc: "Siempre paga primero. Dueño de todo.", color: '#0a84ff', emoji: "👑" }); yaAsignados.add(inversor.nombre); }
-
+    if (inversor) { asignaciones.push({ nombre: inversor.nombre, titulo: "El Inversor", desc: "Siempre paga primero. Dueño de todo.", color: '#0a84ff', emoji: "📈" }); yaAsignados.add(inversor.nombre); }
+    
     let titulosExtra = [
-        { t: "El 'Mañana te hago Bizum'", d: "Le cuesta soltar la pasta.", c: '#ff9f0a', e: "🐌" },
+        { t: "El 'Mañana te hago Bizum'", d: "Le cuesta soltar la pasta.", c: '#ff9f0a', e: "🐢" },
         { t: "El Santo Patrón", d: "Cuentas saneadas al 100%. Un ejemplo.", c: '#32d74b', e: "😇" },
-        { t: "El Suizo", d: "Neutralidad pura. Ni debe ni le deben.", c: '#86868b', e: "🧘" },
-        { t: "El Contable", d: "Calcula todo al céntimo exacto.", c: '#0a84ff', e: "🕵️" },
+        { t: "El Suizo", d: "Neutralidad pura. Ni debe ni le deben.", c: '#86868b', e: "🇨🇭" },
+        { t: "El Contable", d: "Calcula todo al céntimo exacto.", c: '#0a84ff', e: "🧑‍💻" },
         { t: "El Sibarita", d: "Se ha gastado su parte en cosas caras.", c: '#bf5af2', e: "🍷" },
         { t: "El Fantasma", d: "Cero actividad. ¿Sigue viviendo aquí?", c: '#86868b', e: "👻" },
-        { t: "El Inquilino Estándar", d: "Cumple su función vital sin ruido.", c: '#86868b', e: "🏠" },
+        { t: "El Inquilino Estándar", d: "Cumple su función vital sin ruido.", c: '#86868b', e: "🧍" },
         { t: "El Protegido", d: "Siempre hay alguien que le paga las cosas.", c: '#bf5af2', e: "🧸" },
         { t: "El Misterioso", d: "Nadie sabe qué hace con su dinero.", c: '#86868b', e: "👤" }
     ];
-
+    
     usuarios.forEach(u => {
         if (!yaAsignados.has(u.nombre)) {
             let extra = titulosExtra.shift() || { t: "Usuario Genérico", d: "Sin datos destacables.", c: '#86868b', e: "👤" };
@@ -749,7 +812,7 @@ function generarRankingGlobal() {
             yaAsignados.add(u.nombre);
         }
     });
-
+    
     let html = "";
     asignaciones.forEach(a => {
         html += `
