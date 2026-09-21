@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, collection, addDoc, query, orderBy, updateDoc, deleteDoc, onSnapshot, limit } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, collection, addDoc, query, orderBy, updateDoc, deleteDoc, onSnapshot, limit, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-messaging.js";
 
 const firebaseConfig = {
@@ -291,7 +291,7 @@ async function cargarPantallaUnirse(id) {
                 const btn = document.createElement('button'); 
                 btn.innerText = `${getAvatar(nombre)} ${nombre}`; 
                 btn.className = 'btn-name';
-                btn.style.borderColor = getColor(nombre);
+                btn.style.borderColor = getColor(nombre); // Para que se vea su color en la lista
                 btn.onclick = () => unirseYGuardar(nombre, id, datosPiso.nombre_piso); 
                 listaNombres.appendChild(btn);
             });
@@ -320,7 +320,7 @@ async function mostrarDashboard(nombre, id) {
         window.coloresGrupo = datos.colores || {};
         
         document.getElementById('tituloDashboard').innerText = datos.nombre_piso;
-        document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombre)} <span style="color: ${getColor(nombre)}; font-weight: bold;">${nombre}</span>`;
+        document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombre)} <span style="color: ${getColor(nombre)}">${nombre}</span>`;
         participantesGrupo = datos.participantes;
         
         cargarTablon(datos.tablon || { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" });
@@ -376,7 +376,7 @@ document.getElementById('btnCambiarAvatar').addEventListener('click', async () =
             registrarActividad(`**${nombreUsuario}** ha cambiado su avatar a ${emojiFinal}.`, "😎");
             
             window.avataresGrupo[nombreUsuario] = emojiFinal;
-            document.getElementById('nombreUsuarioActual').innerHTML = `${emojiFinal} <span style="color: ${getColor(nombreUsuario)}; font-weight: bold;">${nombreUsuario}</span>`;
+            document.getElementById('nombreUsuarioActual').innerHTML = `${emojiFinal} <span style="color: ${getColor(nombreUsuario)}">${nombreUsuario}</span>`;
             
             if(unsubGastos) unsubGastos(); if(unsubCompra) unsubCompra(); if(unsubLimpieza) unsubLimpieza(); if(unsubHistorial) unsubHistorial();
             mostrarDashboard(nombreUsuario, idPisoActual);
@@ -434,7 +434,7 @@ document.getElementById('btnCambiarColor').addEventListener('click', async () =>
             await updateDoc(doc(db, "grupos", idPisoActual), objUpdate);
             
             window.coloresGrupo[nombreUsuario] = nuevoColor;
-            document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombreUsuario)} <span style="color: ${nuevoColor}; font-weight: bold;">${nombreUsuario}</span>`;
+            document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombreUsuario)} <span style="color: ${nuevoColor}">${nombreUsuario}</span>`;
             
             if(unsubGastos) unsubGastos(); if(unsubCompra) unsubCompra(); if(unsubLimpieza) unsubLimpieza(); if(unsubHistorial) unsubHistorial();
             mostrarDashboard(nombreUsuario, idPisoActual);
@@ -484,6 +484,30 @@ document.getElementById('btnCerrarTablon').addEventListener('click', () => { doc
 
 document.getElementById('btnAbrirHistorial').addEventListener('click', () => { window.scrollTo(0, 0); document.body.style.overflow = 'hidden'; document.getElementById('vistaHistorial').classList.remove('hidden'); });
 document.getElementById('btnCerrarHistorial').addEventListener('click', () => { document.body.style.overflow = 'auto'; document.getElementById('vistaHistorial').classList.add('hidden'); });
+
+document.getElementById('btnVaciarHistorial').addEventListener('click', async () => {
+    const seguro = await window.mostrarConfirmacion("Vaciar Historial", "¿Seguro que quieres borrar todo el registro de actividad? Esto no se puede deshacer.");
+    if (seguro) {
+        const btn = document.getElementById('btnVaciarHistorial');
+        btn.disabled = true;
+        btn.innerText = "Borrando...";
+        try {
+            const q = collection(db, "grupos", idPisoActual, "historial");
+            const snap = await getDocs(q);
+            const borrados = [];
+            snap.forEach(d => {
+                borrados.push(deleteDoc(doc(db, "grupos", idPisoActual, "historial", d.id)));
+            });
+            await Promise.all(borrados);
+            registrarActividad(`**${nombreUsuario}** vació el historial de actividad.`, "🧹");
+        } catch (e) {
+            await window.mostrarAlerta("Error", "No se pudo vaciar el historial.");
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "Vaciar";
+        }
+    }
+});
 
 function cargarHistorial() {
     if (unsubHistorial) unsubHistorial();
@@ -1121,6 +1145,7 @@ function generarRankingGlobal() {
     
     let html = "";
     asignaciones.forEach(a => {
+        // En lugar del color de la "categoría", forzamos que el borde lateral sea tu color personal elegido
         html += `
             <div style="background: rgba(255,255,255,0.03); border-radius: 12px; padding: 15px; margin-bottom: 12px; display: flex; align-items: center; border: 1px solid #2c2c2e; border-left: 4px solid ${getColor(a.nombre)};">
                 <div style="flex: 1; padding-right: 10px;">
