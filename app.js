@@ -71,7 +71,7 @@ function getAvatar(nombre) {
 }
 
 function getColor(nombre) {
-    return window.coloresGrupo[nombre] || "#0a84ff"; // Azul por defecto
+    return window.coloresGrupo[nombre] || "#0a84ff"; 
 }
 
 // --- SISTEMA DE HISTORIAL DE ACTIVIDAD ---
@@ -255,7 +255,6 @@ document.getElementById('btnCrear').addEventListener('click', async () => {
     const idUnico = 'piso-' + Math.random().toString(36).substring(2, 8);
     const tablonInicial = { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" };
     
-    // Generador de avatares y colores aleatorios al crear un piso nuevo
     const emojis = ["🦊", "🐼", "🐵", "🐶", "🐱", "🐯", "🐨", "🐸", "🐷", "🐻", "🐰", "🦁", "🐮", "🐙", "🐢", "👽", "🤖", "👻", "🤡", "💩"];
     const hexColors = ["#ff453a", "#ff9f0a", "#ffd60a", "#32d74b", "#66d4cf", "#0a84ff", "#bf5af2", "#ff375f", "#a2845e", "#86868b"];
     const shuffledEmojis = emojis.sort(() => 0.5 - Math.random());
@@ -491,7 +490,6 @@ document.getElementById('tabCompra').addEventListener('click', () => activarPest
 document.getElementById('tabLimpieza').addEventListener('click', () => activarPestaña('tabLimpieza', 'vistaLimpieza'));
 document.getElementById('tabRanking').addEventListener('click', () => activarPestaña('tabRanking', 'vistaRanking'));
 
-// NUEVO: Listeners para abrir y cerrar Gráficos
 document.getElementById('btnAbrirGraficos').addEventListener('click', () => { window.scrollTo(0, 0); document.body.style.overflow = 'hidden'; document.getElementById('vistaGraficos').classList.remove('hidden'); actualizarGraficos(); });
 document.getElementById('btnCerrarGraficos').addEventListener('click', () => { document.body.style.overflow = 'auto'; document.getElementById('vistaGraficos').classList.add('hidden'); });
 
@@ -558,9 +556,8 @@ function cargarHistorial() {
     });
 }
 
-// --- MÓDULO GRÁFICOS ---
 function actualizarGraficos() {
-    let misData = [0, 0, 0]; // 0: Piso, 1: Facturas, 2: Ocio
+    let misData = [0, 0, 0]; 
     let pisoData = [0, 0, 0];
     let totalMio = 0;
     let totalPiso = 0;
@@ -580,13 +577,11 @@ function actualizarGraficos() {
         }
     });
     
-    // Rellenamos los textos debajo del gráfico MIS GASTOS
     if(document.getElementById('totalMisGastos')) document.getElementById('totalMisGastos').innerText = `Total: ${totalMio.toFixed(2)}€`;
     if(document.getElementById('misG-piso')) document.getElementById('misG-piso').innerText = `${misData[0].toFixed(2)}€`;
     if(document.getElementById('misG-facturas')) document.getElementById('misG-facturas').innerText = `${misData[1].toFixed(2)}€`;
     if(document.getElementById('misG-ocio')) document.getElementById('misG-ocio').innerText = `${misData[2].toFixed(2)}€`;
     
-    // Rellenamos los textos debajo del gráfico GASTOS DEL PISO
     if(document.getElementById('totalPisoGastos')) document.getElementById('totalPisoGastos').innerText = `Total: ${totalPiso.toFixed(2)}€`;
     if(document.getElementById('pisoG-piso')) document.getElementById('pisoG-piso').innerText = `${pisoData[0].toFixed(2)}€`;
     if(document.getElementById('pisoG-facturas')) document.getElementById('pisoG-facturas').innerText = `${pisoData[1].toFixed(2)}€`;
@@ -611,7 +606,7 @@ function actualizarGraficos() {
         },
         options: {
             plugins: {
-                legend: { display: false } // <- Quitamos la leyenda que viene por defecto
+                legend: { display: false }
             }
         }
     });
@@ -620,11 +615,9 @@ function actualizarGraficos() {
     if (ctxPiso && window.Chart) chartPisoGastosObj = new Chart(ctxPiso, configParams(pisoData));
 }
 
-// --- MÓDULO GASTOS ---
 function resetFormGasto() {
     idGastoEditando = null; document.getElementById('tituloFormGasto').innerText = 'Nuevo Gasto';
     document.getElementById('conceptoGasto').value = ''; document.getElementById('importeGasto').value = '';
-    // NUEVO: Resetear la categoría al por defecto
     document.getElementById('categoriaGasto').value = '🏠 Piso';
     document.getElementById('btnGuardarGasto').innerText = 'Guardar'; document.getElementById('btnEliminarGasto').classList.add('hidden');
     document.getElementById('tipoDivisionGasto').value = 'iguales'; 
@@ -696,7 +689,6 @@ window.abrirEditarGasto = function(gastoObj) {
     idGastoEditando = gastoObj.id; document.getElementById('tituloFormGasto').innerText = 'Editar Gasto';
     document.getElementById('conceptoGasto').value = gastoObj.concepto; document.getElementById('importeGasto').value = gastoObj.importe;
     
-    // NUEVO: Cargar categoría al editar (si existe, si no '🏠 Piso')
     document.getElementById('categoriaGasto').value = gastoObj.categoria || '🏠 Piso';
     
     if (gastoObj.involucrados.length > 0 && typeof gastoObj.involucrados[0] === 'object') { document.getElementById('tipoDivisionGasto').value = 'manual'; } else { document.getElementById('tipoDivisionGasto').value = 'iguales'; }
@@ -721,7 +713,7 @@ document.getElementById('btnEliminarGasto').addEventListener('click', async () =
 document.getElementById('btnGuardarGasto').addEventListener('click', async () => {
     const concepto = document.getElementById('conceptoGasto').value; const importe = parseFloat(document.getElementById('importeGasto').value);
     const pagador = document.getElementById('pagadorGasto').value; const tipo = document.getElementById('tipoDivisionGasto').value;
-    const categoria = document.getElementById('categoriaGasto').value; // NUEVO: Capturar categoría
+    const categoria = document.getElementById('categoriaGasto').value; 
     
     if (!concepto || isNaN(importe)) return await window.mostrarAlerta("Datos incompletos", "Rellena el concepto y el importe.");
     
@@ -747,7 +739,7 @@ document.getElementById('btnGuardarGasto').addEventListener('click', async () =>
     }
     
     const boton = document.getElementById('btnGuardarGasto'); boton.innerText = "Guardando..."; boton.disabled = true;
-    const datosGasto = { concepto: concepto, importe: importe, pagador: pagador, involucrados: involucradosData, categoria: categoria }; // Añadida categoría
+    const datosGasto = { concepto: concepto, importe: importe, pagador: pagador, involucrados: involucradosData, categoria: categoria }; 
     try {
         if (idGastoEditando) {
             await updateDoc(doc(db, "grupos", idPisoActual, "gastos", idGastoEditando), datosGasto);
@@ -793,7 +785,6 @@ function cargarListaGastos() {
             const divGasto = document.createElement('div'); divGasto.className = 'item-lista';
             const extraDetalle = typeof gasto.involucrados[0] === 'object' ? ' (Manual)' : '';
             
-            // Extraer el icono de la categoría (Ej: "🏠" de "🏠 Piso")
             const iconoCat = gasto.categoria ? gasto.categoria.split(' ')[0] : '🏠';
             
             divGasto.innerHTML = `<div class="item-info"><span class="item-titulo"><span style="font-size:0.8em; margin-right:4px; padding: 2px 6px; border-radius:6px; background:#3a3a3c;">${iconoCat}</span>${gasto.concepto}</span><span class="item-detalle"><span style="color:${getColor(gasto.pagador)}; font-weight: bold;">${getAvatar(gasto.pagador)} ${gasto.pagador}</span> pagó para ${gasto.involucrados.length}${extraDetalle} • ${new Date(gasto.fecha).toLocaleDateString()}</span></div><div style="display: flex; align-items: center; gap: 12px;"><span class="gasto-importe">${gasto.importe.toFixed(2)}€</span><button type="button" style="background:none; border:none; padding:0; cursor:pointer; font-size:1.4em;" onclick='window.abrirEditarGasto(${JSON.stringify(gasto).replace(/'/g, "\\'")})'>✏️</button></div>`;
@@ -966,6 +957,45 @@ window.marcarLimpieza = async function(idZona, timestamp, esTarde = false, nombr
     catch (e) { await window.mostrarAlerta("Error", "No se pudo confirmar."); }
 };
 
+window.renderFaltasPolicial = function() {
+    const cont = document.getElementById('seccionFaltasPolicial');
+    const lista = document.getElementById('listaFaltasPolicial');
+    if (!cont || !lista) return;
+
+    let infractores = Object.keys(ultimosStrikes).filter(u => ultimosStrikes[u] > 0);
+    infractores.sort((a, b) => ultimosStrikes[b] - ultimosStrikes[a]);
+    
+    if (infractores.length === 0) {
+        cont.classList.add('hidden');
+        return;
+    }
+    
+    cont.classList.remove('hidden');
+    lista.innerHTML = '';
+    
+    infractores.forEach(infractor => {
+        let faltas = ultimosStrikes[infractor];
+        let nivel = faltas >= 3 ? "EN BUSCA Y CAPTURA (DEBE RONDA)" : (faltas === 2 ? "SOSPECHOSO HABITUAL" : "PRIMER AVISO");
+        let color = faltas >= 3 ? "#ff453a" : (faltas === 2 ? "#ff9f0a" : "#ffd60a");
+        
+        lista.innerHTML += `
+            <div style="background: rgba(0,0,0,0.5); border: 1px solid ${color}; padding: 12px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="font-size: 2.2em; filter: drop-shadow(0 0 5px ${color}88);">${getAvatar(infractor)}</div>
+                    <div>
+                        <div style="font-family: monospace; font-weight: bold; color: #f5f5f7; font-size: 1.15em;">${infractor}</div>
+                        <div style="font-family: monospace; color: ${color}; font-size: 0.8em; letter-spacing: 0.5px;">[ ${nivel} ]</div>
+                    </div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-weight: 900; color: ${color}; font-size: 1.6em; font-family: monospace;">${faltas}</div>
+                    <div style="color: ${color}; font-size: 0.7em; font-family: monospace; letter-spacing: 1px;">FALTA${faltas > 1 ? 'S' : ''}</div>
+                </div>
+            </div>
+        `;
+    });
+};
+
 function cargarListaLimpieza() {
     if (unsubLimpieza) unsubLimpieza();
     const q = query(collection(db, "grupos", idPisoActual, "zonas_limpieza"));
@@ -999,7 +1029,10 @@ function cargarListaLimpieza() {
                 setTimeout(() => { window.mostrarAlerta("⚠️ ALERTA DE INSALUBRIDAD", "Los siguientes inquilinos llevan 3 o más tareas de limpieza sin hacer y deben una ronda al piso:\n\n" + morososLimpieza.join("\n")); }, 1000);
             }
         }
-        renderVistaSemanaActual(); renderCalendarioMensual(); generarRankingGlobal();
+        renderVistaSemanaActual(); 
+        renderCalendarioMensual(); 
+        if (typeof window.renderFaltasPolicial === 'function') window.renderFaltasPolicial();
+        generarRankingGlobal();
     });
 }
 
@@ -1184,12 +1217,6 @@ function generarRankingGlobal() {
     
     let asignaciones = []; let yaAsignados = new Set();
     
-    usuarios.forEach(u => {
-        if (u.strikes >= 3) { asignaciones.push({ nombre: u.nombre, titulo: "El Cerdo del Piso", desc: "Acumula " + u.strikes + " tareas sin hacer. Debe ronda.", color: '#ff453a', emoji: "🐷" }); yaAsignados.add(u.nombre); }
-        else if (u.strikes == 2 && !yaAsignados.has(u.nombre)) { asignaciones.push({ nombre: u.nombre, titulo: "Peligro Biológico", desc: "Lleva 2 tareas saltadas. Evita la escoba.", color: '#ff9f0a', emoji: "☣️" }); yaAsignados.add(u.nombre); }
-        else if (u.strikes == 1 && !yaAsignados.has(u.nombre)) { asignaciones.push({ nombre: u.nombre, titulo: "El Remolón", desc: "Se ha saltado 1 tarea. Le vigilamos.", color: '#ffd60a', emoji: "👀" }); yaAsignados.add(u.nombre); }
-    });
-    
     let sugar = porSaldo.find(u => u.saldo > 0.01 && !yaAsignados.has(u.nombre));
     if (sugar) { asignaciones.push({ nombre: sugar.nombre, titulo: "El Sugar Daddy", desc: "El banco central del piso. Todos le deben.", color: '#32d74b', emoji: "🤑" }); yaAsignados.add(sugar.nombre); }
     
@@ -1227,7 +1254,10 @@ function generarRankingGlobal() {
         { t: "El Monje Zen", d: "Inmune al drama y a las discusiones del piso.", c: '#bf5af2', e: "🧘" },
         { t: "El Chef de Air Fryer", d: "Hace desde torreznos hasta postres en la freidora de aire.", c: '#ff9f0a', e: "🍟" },
         { t: "El Gamer de Guardia", d: "Su PS5 hace más horas extra que un reloj.", c: '#0a84ff', e: "🎮" },
-        { t: "El Superviviente", d: "Se iría de vivac al monte antes que fregar los platos.", c: '#32d74b', e: "🏕️" }
+        { t: "El Superviviente", d: "Se iría de vivac al monte antes que fregar los platos.", c: '#32d74b', e: "🏕️" },
+        { t: "El Cerdo del Piso", d: "Sabe que el polvo no pica.", c: '#ff453a', e: "🐷" },
+        { t: "Peligro Biológico", d: "Evita la escoba a toda costa.", c: '#ff9f0a', e: "☣️" },
+        { t: "El Remolón", d: "Limpiar hoy no, mañana.", c: '#ffd60a', e: "👀" }
     ];
 
     titulosExtra.sort(() => Math.random() - 0.5);
@@ -1242,11 +1272,14 @@ function generarRankingGlobal() {
     
     let html = "";
     asignaciones.forEach(a => {
+        
+        let warningBadge = ultimosStrikes[a.nombre] > 0 ? `<div style="font-size: 0.45em; display: inline-block; background: #ff453a; color: #fff; padding: 2px 6px; border-radius: 8px; vertical-align: middle; margin-left: 6px; font-weight: bold; letter-spacing: 0.5px;">🚨 ${ultimosStrikes[a.nombre]} FALTA${ultimosStrikes[a.nombre]>1?'S':''}</div>` : '';
+        
         html += `
             <div style="background: rgba(255,255,255,0.03); border-radius: 12px; padding: 15px; margin-bottom: 12px; display: flex; align-items: center; border: 1px solid #2c2c2e; border-left: 4px solid ${getColor(a.nombre)};">
                 <div style="flex: 1; padding-right: 10px;">
                     <div style="font-size: 0.85em; color: ${a.color}; font-weight: 700; text-transform: uppercase;">${a.titulo}</div>
-                    <div style="font-size: 1.25em; font-weight: bold; color: #f5f5f7; margin: 2px 0;"><span style="color:${getColor(a.nombre)}">${getAvatar(a.nombre)}</span> ${a.nombre}</div>
+                    <div style="font-size: 1.25em; font-weight: bold; color: #f5f5f7; margin: 2px 0;"><span style="color:${getColor(a.nombre)}">${getAvatar(a.nombre)}</span> ${a.nombre} ${warningBadge}</div>
                     <div style="font-size: 0.8em; color: #86868b; line-height: 1.3;">${a.desc}</div>
                 </div>
                 <div style="font-size: 2.8em; margin-left: auto; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));">${a.emoji}</div>
