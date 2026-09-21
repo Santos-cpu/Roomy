@@ -255,6 +255,7 @@ document.getElementById('btnCrear').addEventListener('click', async () => {
     const idUnico = 'piso-' + Math.random().toString(36).substring(2, 8);
     const tablonInicial = { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" };
     
+    // Generador de avatares y colores aleatorios al crear un piso nuevo
     const emojis = ["🦊", "🐼", "🐵", "🐶", "🐱", "🐯", "🐨", "🐸", "🐷", "🐻", "🐰", "🦁", "🐮", "🐙", "🐢", "👽", "🤖", "👻", "🤡", "💩"];
     const hexColors = ["#ff453a", "#ff9f0a", "#ffd60a", "#32d74b", "#66d4cf", "#0a84ff", "#bf5af2", "#ff375f", "#a2845e", "#86868b"];
     const shuffledEmojis = emojis.sort(() => 0.5 - Math.random());
@@ -304,7 +305,7 @@ async function cargarPantallaUnirse(id) {
                 const btn = document.createElement('button'); 
                 btn.innerText = `${getAvatar(nombre)} ${nombre}`; 
                 btn.className = 'btn-name';
-                btn.style.borderColor = getColor(nombre); 
+                btn.style.borderColor = getColor(nombre); // Para que se vea su color en la lista
                 btn.onclick = () => unirseYGuardar(nombre, id, datosPiso.nombre_piso); 
                 listaNombres.appendChild(btn);
             });
@@ -333,7 +334,7 @@ async function mostrarDashboard(nombre, id) {
         window.coloresGrupo = datos.colores || {};
         
         document.getElementById('tituloDashboard').innerText = datos.nombre_piso;
-        document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombre)} <span style="color: ${getColor(nombre)}; font-weight: bold;">${nombre}</span>`;
+        document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombre)} <span style="color: ${getColor(nombre)}">${nombre}</span>`;
         participantesGrupo = datos.participantes;
         
         cargarTablon(datos.tablon || { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" });
@@ -579,8 +580,17 @@ function actualizarGraficos() {
         }
     });
     
+    // Rellenamos los textos debajo del gráfico MIS GASTOS
     document.getElementById('totalMisGastos').innerText = `Total: ${totalMio.toFixed(2)}€`;
+    document.getElementById('misG-piso').innerText = `${misData[0].toFixed(2)}€`;
+    document.getElementById('misG-facturas').innerText = `${misData[1].toFixed(2)}€`;
+    document.getElementById('misG-ocio').innerText = `${misData[2].toFixed(2)}€`;
+    
+    // Rellenamos los textos debajo del gráfico GASTOS DEL PISO
     document.getElementById('totalPisoGastos').innerText = `Total: ${totalPiso.toFixed(2)}€`;
+    document.getElementById('pisoG-piso').innerText = `${pisoData[0].toFixed(2)}€`;
+    document.getElementById('pisoG-facturas').innerText = `${pisoData[1].toFixed(2)}€`;
+    document.getElementById('pisoG-ocio').innerText = `${pisoData[2].toFixed(2)}€`;
     
     const ctxMis = document.getElementById('chartMisGastos');
     const ctxPiso = document.getElementById('chartPisoGastos');
