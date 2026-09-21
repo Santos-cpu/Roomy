@@ -330,7 +330,9 @@ function resetFormGasto() {
     idGastoEditando = null; document.getElementById('tituloFormGasto').innerText = 'Nuevo Gasto';
     document.getElementById('conceptoGasto').value = ''; document.getElementById('importeGasto').value = '';
     document.getElementById('btnGuardarGasto').innerText = 'Guardar'; document.getElementById('btnEliminarGasto').classList.add('hidden');
-    document.getElementById('tipoDivisionGasto').value = 'iguales'; prepararFormularioGastos();
+    document.getElementById('tipoDivisionGasto').value = 'iguales'; 
+    window.articulosPendientesDeBorrar = []; // Limpiamos caché de la compra
+    prepararFormularioGastos();
 }
 
 document.getElementById('btnMostrarFormGasto').addEventListener('click', () => {
@@ -339,22 +341,30 @@ document.getElementById('btnMostrarFormGasto').addEventListener('click', () => {
 
 document.getElementById('btnCancelarGasto').addEventListener('click', () => {
     document.getElementById('formGasto').classList.add('hidden'); document.getElementById('btnMostrarFormGasto').classList.remove('hidden');
+    window.articulosPendientesDeBorrar = []; // Limpiar por si cancela la conversión
 });
 
-document.getElementById('tipoDivisionGasto').addEventListener('change', prepararFormularioGastos);
+document.getElementById('tipoDivisionGasto').addEventListener('change', () => prepararFormularioGastos(idGastoEditando ? getGastoObjPorId(idGastoEditando) : null));
+
+function getGastoObjPorId(id) {
+    return ultimosGastos.find(g => g.id === id);
+}
 
 function prepararFormularioGastos(gastoObj = null) {
     const selectPagador = document.getElementById('pagadorGasto'); const divInvolucrados = document.getElementById('involucradosGasto');
     const tipoDiv = document.getElementById('tipoDivisionGasto').value; const infoManual = document.getElementById('infoDivisionManual');
     
-    if(!gastoObj) { 
-        selectPagador.innerHTML = ''; 
-        participantesGrupo.forEach(p => { 
-            const opt = document.createElement('option'); opt.value = p; opt.innerText = p; 
-            if (p === nombreUsuario) opt.selected = true; 
-            selectPagador.appendChild(opt); 
-        }); 
-    }
+    // SIEMPRE renderizamos el listado de pagadores para evitar que se quede vacío
+    selectPagador.innerHTML = ''; 
+    participantesGrupo.forEach(p => { 
+        const opt = document.createElement('option'); opt.value = p; opt.innerText = p; 
+        if (gastoObj && gastoObj.pagador === p) {
+            opt.selected = true;
+        } else if (!gastoObj && p === nombreUsuario) {
+            opt.selected = true;
+        }
+        selectPagador.appendChild(opt); 
+    }); 
     
     divInvolucrados.innerHTML = '';
     if (tipoDiv === 'iguales') {
@@ -390,7 +400,7 @@ window.abrirEditarGasto = function(gastoObj) {
     idGastoEditando = gastoObj.id; document.getElementById('tituloFormGasto').innerText = 'Editar Gasto';
     document.getElementById('conceptoGasto').value = gastoObj.concepto; document.getElementById('importeGasto').value = gastoObj.importe;
     if (gastoObj.involucrados.length > 0 && typeof gastoObj.involucrados[0] === 'object') { document.getElementById('tipoDivisionGasto').value = 'manual'; } else { document.getElementById('tipoDivisionGasto').value = 'iguales'; }
-    prepararFormularioGastos(gastoObj); document.getElementById('pagadorGasto').value = gastoObj.pagador;
+    prepararFormularioGastos(gastoObj);
     document.getElementById('btnGuardarGasto').innerText = 'Actualizar'; document.getElementById('btnEliminarGasto').classList.remove('hidden');
     document.getElementById('formGasto').classList.remove('hidden'); document.getElementById('btnMostrarFormGasto').classList.add('hidden');
     document.getElementById('formGasto').scrollIntoView({ behavior: 'smooth' });
@@ -434,8 +444,20 @@ document.getElementById('btnGuardarGasto').addEventListener('click', async () =>
     const boton = document.getElementById('btnGuardarGasto'); boton.innerText = "Guardando..."; boton.disabled = true;
     const datosGasto = { concepto: concepto, importe: importe, pagador: pagador, involucrados: involucradosData };
     try {
-        if (idGastoEditando) await updateDoc(doc(db, "grupos", idPisoActual, "gastos", idGastoEditando), datosGasto);
-        else { datosGasto.fecha = new Date().toISOString(); await addDoc(collection(db, "grupos", idPisoActual, "gastos"), datosGasto); }
+        if (idGastoEditando) {
+            await updateDoc(doc(db, "grupos", idPisoActual, "gastos", idGastoEditando), datosGasto);
+        } else { 
+            datosGasto.fecha = new Date().toISOString(); 
+            await addDoc(collection(db, "grupos", idPisoActual, "gastos"), datosGasto); 
+            
+            // Si venimos de la lista de la compra, borramos los artículos marcados
+            if (window.articulosPendientesDeBorrar && window.articulosPendientesDeBorrar.length > 0) {
+                for (let idArticulo of window.articulosPendientesDeBorrar) {
+                    await deleteDoc(doc(db, "grupos", idPisoActual, "compra", idArticulo));
+                }
+                window.articulosPendientesDeBorrar = []; 
+            }
+        }
         document.getElementById('btnCancelarGasto').click(); 
     } catch (error) { await window.mostrarAlerta("Error", "Fallo al guardar."); } finally { boton.disabled = false; }
 });
@@ -537,17 +559,19 @@ window.borrarArticulo = async function(id) { await deleteDoc(doc(db, "grupos", i
 document.getElementById('btnComprarSeleccionados').addEventListener('click', async () => {
     const seleccionados = Array.from(document.querySelectorAll('.cb-articulo:checked'));
     if (seleccionados.length === 0) return await window.mostrarAlerta("Atención", "Selecciona al menos un producto.");
-    const precioStr = await window.mostrarPrompt("Precio de la compra", "Introduce lo que te ha costado en total:");
-    if (precioStr === null) return;
-    const precio = parseFloat(precioStr);
-    if (isNaN(precio) || precio <= 0) return await window.mostrarAlerta("Error", "El precio introducido no es válido.");
+    
     const nombresArticulos = seleccionados.map(cb => cb.getAttribute('data-nombre')).join(', ');
-    const concepto = nombresArticulos.length > 40 ? nombresArticulos.substring(0, 37) + '...' : nombresArticulos;
-    try {
-        await addDoc(collection(db, "grupos", idPisoActual, "gastos"), { concepto: "🛒 Compra: " + concepto, importe: precio, pagador: nombreUsuario, involucrados: participantesGrupo, fecha: new Date().toISOString() });
-        for (let cb of seleccionados) { await deleteDoc(doc(db, "grupos", idPisoActual, "compra", cb.value)); }
-        await window.mostrarAlerta("¡Hecho!", "La compra se ha convertido en un Gasto."); activarPestaña('tabGastos', 'vistaGastos');
-    } catch(e) { await window.mostrarAlerta("Error", "Fallo al procesar."); }
+    const conceptoStr = nombresArticulos.length > 40 ? nombresArticulos.substring(0, 37) + '...' : nombresArticulos;
+    
+    // Redirigir al formulario de Gasto
+    resetFormGasto();
+    document.getElementById('conceptoGasto').value = "🛒 Compra: " + conceptoStr;
+    window.articulosPendientesDeBorrar = seleccionados.map(cb => cb.value); // Guardamos los IDs temporalmente
+    
+    activarPestaña('tabGastos', 'vistaGastos');
+    document.getElementById('formGasto').classList.remove('hidden');
+    document.getElementById('btnMostrarFormGasto').classList.add('hidden');
+    document.getElementById('formGasto').scrollIntoView({ behavior: 'smooth' });
 });
 
 // --- MÓDULO LIMPIEZA & CALENDARIO ---
@@ -874,6 +898,7 @@ function generarRankingGlobal() {
         { t: "El Superviviente", d: "Se iría de vivac al monte antes que fregar los platos.", c: '#32d74b', e: "🏕️" }
     ];
 
+    // Barajamos los títulos estándar para que cada día toquen diferentes a los usuarios base
     titulosExtra.sort(() => Math.random() - 0.5);
     
     usuarios.forEach(u => {
