@@ -59,6 +59,10 @@
         .info-label { color: #86868b; font-size: 0.85em; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px; }
         .info-value { color: #f5f5f7; font-size: 1.2em; font-weight: 600; word-break: break-word; }
         .info-sub { color: #0a84ff; font-family: monospace; font-size: 1.1em; margin-top: 5px; }
+
+        /* Estilo para los menús desplegables */
+        .menu-item { padding: 12px 15px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s; }
+        .menu-item:active { background: #3a3a3c; }
         
         #iosModalOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; }
         #iosModalOverlay.active { opacity: 1; pointer-events: auto; }
@@ -112,9 +116,22 @@
                 
                 <div style="display: flex; align-items: flex-start; gap: 6px;">
                     <button id="btnCopiarEnlace" class="btn-header" style="font-size: 1.1em; height: 36px; margin: 0;">🔗</button>
-                    <button id="btnCambiarUsuario" class="btn-header" style="height: 36px; margin: 0;">
-                        <span id="nombreUsuarioActual"></span><span style="font-size: 1.1em; margin-left: 4px;">🔄</span>
-                    </button>
+                    
+                    <!-- NUEVO: Menú desplegable de perfil -->
+                    <div style="position: relative;" id="contenedorMenuPerfil">
+                        <button id="btnPerfil" class="btn-header" style="height: 36px; margin: 0;">
+                            <span id="nombreUsuarioActual"></span><span style="font-size: 1.1em; margin-left: 4px;">⚙️</span>
+                        </button>
+                        <div id="menuPerfil" class="hidden" style="position: absolute; top: 100%; right: 0; margin-top: 8px; background: #2c2c2e; border: 1px solid #3a3a3c; border-radius: 12px; width: 190px; box-shadow: 0 8px 20px rgba(0,0,0,0.6); z-index: 200; overflow: hidden;">
+                            <div id="btnCambiarAvatar" class="menu-item" style="border-bottom: 1px solid #3a3a3c;">
+                                <span style="font-size: 1.2em;">😎</span> <span style="color: #f5f5f7; font-size: 0.9em; font-weight: 500;">Cambiar Avatar</span>
+                            </div>
+                            <div id="btnCambiarUsuarioMenu" class="menu-item" style="color: #ff453a;">
+                                <span style="font-size: 1.2em;">🔄</span> <span style="font-size: 0.9em; font-weight: 500;">Cambiar cuenta</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Columna para Tablón y Campanita de Historial -->
                     <div style="display: flex; flex-direction: column; gap: 6px;">
                         <button id="btnAbrirTablon" class="btn-header" style="font-size: 1.2em; padding: 0 12px; height: 36px; margin: 0;">📌</button>
