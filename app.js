@@ -235,7 +235,7 @@ document.getElementById('btnCrear').addEventListener('click', async () => {
     const idUnico = 'piso-' + Math.random().toString(36).substring(2, 8);
     const tablonInicial = { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" };
     
-    // Generador de avatares aleatorios
+    // Generador de avatares aleatorios (solo al crear un piso nuevo)
     const emojis = ["🦊", "🐼", "🐵", "🐶", "🐱", "🐯", "🐨", "🐸", "🐷", "🐻", "🐰", "🦁", "🐮", "🐙", "🐢", "👽", "🤖", "👻", "🤡", "💩"];
     const shuffled = emojis.sort(() => 0.5 - Math.random());
     let avataresNuevos = {};
@@ -272,7 +272,6 @@ async function cargarPantallaUnirse(id) {
             const listaNombres = document.getElementById('listaNombres'); 
             listaNombres.innerHTML = ''; 
             
-            // Asignar fallback temporal por si es un piso antiguo sin avatares
             window.avataresGrupo = datosPiso.avatares || {};
             
             datosPiso.participantes.forEach(nombre => {
@@ -320,7 +319,22 @@ async function mostrarDashboard(nombre, id) {
     }
 }
 
-document.getElementById('btnCambiarUsuario').addEventListener('click', async () => {
+// --- LÓGICA DEL MENÚ DE PERFIL DESPLEGABLE ---
+const menuPerfil = document.getElementById('menuPerfil');
+document.getElementById('btnPerfil').addEventListener('click', (e) => {
+    e.stopPropagation(); 
+    menuPerfil.classList.toggle('hidden');
+});
+
+document.addEventListener('click', (e) => {
+    const contenedor = document.getElementById('contenedorMenuPerfil');
+    if (contenedor && !contenedor.contains(e.target)) {
+        menuPerfil.classList.add('hidden');
+    }
+});
+
+document.getElementById('btnCambiarUsuarioMenu').addEventListener('click', async () => {
+    menuPerfil.classList.add('hidden');
     const seguro = await window.mostrarConfirmacion("Cambiar de perfil", "¿Te has equivocado de nombre? Volverás a la selección de nombres.");
     if (seguro) {
         if(unsubGastos) unsubGastos(); if(unsubCompra) unsubCompra(); if(unsubLimpieza) unsubLimpieza(); if(unsubHistorial) unsubHistorial();
@@ -329,6 +343,32 @@ document.getElementById('btnCambiarUsuario').addEventListener('click', async () 
         document.body.classList.add('pantalla-centrada');
         document.getElementById('pantallaUnirse').classList.remove('hidden');
         await cargarPantallaUnirse(idPisoActual);
+    }
+});
+
+document.getElementById('btnCambiarAvatar').addEventListener('click', async () => {
+    menuPerfil.classList.add('hidden');
+    const nuevoEmoji = await window.mostrarPrompt("Cambiar Avatar", "Escribe o pega el emoji que quieras para tu perfil (Ej: 👽, 🦊, 🌮):");
+    
+    if (nuevoEmoji && nuevoEmoji.trim().length > 0) {
+        const emojiFinal = nuevoEmoji.trim().substring(0, 4); 
+        
+        try {
+            const objUpdate = {};
+            objUpdate[`avatares.${nombreUsuario}`] = emojiFinal;
+            await updateDoc(doc(db, "grupos", idPisoActual), objUpdate);
+            
+            registrarActividad(`**${nombreUsuario}** ha cambiado su avatar a ${emojiFinal}.`, "😎");
+            
+            window.avataresGrupo[nombreUsuario] = emojiFinal;
+            document.getElementById('nombreUsuarioActual').innerText = `${emojiFinal} ${nombreUsuario}`;
+            
+            if(unsubGastos) unsubGastos(); if(unsubCompra) unsubCompra(); if(unsubLimpieza) unsubLimpieza(); if(unsubHistorial) unsubHistorial();
+            mostrarDashboard(nombreUsuario, idPisoActual);
+            
+        } catch (error) { 
+            await window.mostrarAlerta("Error", "No se pudo cambiar el avatar."); 
+        }
     }
 });
 
@@ -389,7 +429,7 @@ function cargarHistorial() {
                 <div class="item-lista">
                     <div style="font-size: 1.8em; margin-right: 15px;">${act.icono}</div>
                     <div class="item-info">
-                        <span class="item-titulo">${act.mensaje}</span>
+                        <span class="item-titulo" style="font-size: 0.95em;">${act.mensaje}</span>
                         <span class="item-detalle">${fechaStr}</span>
                     </div>
                 </div>`;
