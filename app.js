@@ -1,5 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, collection, addDoc, query, orderBy, updateDoc, deleteDoc, onSnapshot, limit, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { enableIndexedDbPersistence, writeBatch } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-messaging.js";
 
 const firebaseConfig = {
@@ -13,6 +14,16 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+
+// NUEVO: Soporte Offline de Firestore activado
+enableIndexedDbPersistence(db).catch((err) => {
+    if (err.code == 'failed-precondition') {
+        console.warn('Persistencia: Varias pestañas abiertas.');
+    } else if (err.code == 'unimplemented') {
+        console.warn('Persistencia: Navegador no compatible.');
+    }
+});
+
 const messaging = getMessaging(app);
 
 async function activarNotificacionesPush() {
@@ -320,7 +331,7 @@ async function mostrarDashboard(nombre, id) {
         window.coloresGrupo = datos.colores || {};
         
         document.getElementById('tituloDashboard').innerText = datos.nombre_piso;
-        document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombre)} <span style="color: ${getColor(nombre)}">${nombre}</span>`;
+        document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombre)} <span style="color: ${getColor(nombre)}; font-weight: bold;">${nombre}</span>`;
         participantesGrupo = datos.participantes;
         
         cargarTablon(datos.tablon || { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" });
@@ -376,7 +387,7 @@ document.getElementById('btnCambiarAvatar').addEventListener('click', async () =
             registrarActividad(`**${nombreUsuario}** ha cambiado su avatar a ${emojiFinal}.`, "😎");
             
             window.avataresGrupo[nombreUsuario] = emojiFinal;
-            document.getElementById('nombreUsuarioActual').innerHTML = `${emojiFinal} <span style="color: ${getColor(nombreUsuario)}">${nombreUsuario}</span>`;
+            document.getElementById('nombreUsuarioActual').innerHTML = `${emojiFinal} <span style="color: ${getColor(nombreUsuario)}; font-weight: bold;">${nombreUsuario}</span>`;
             
             if(unsubGastos) unsubGastos(); if(unsubCompra) unsubCompra(); if(unsubLimpieza) unsubLimpieza(); if(unsubHistorial) unsubHistorial();
             mostrarDashboard(nombreUsuario, idPisoActual);
@@ -434,7 +445,7 @@ document.getElementById('btnCambiarColor').addEventListener('click', async () =>
             await updateDoc(doc(db, "grupos", idPisoActual), objUpdate);
             
             window.coloresGrupo[nombreUsuario] = nuevoColor;
-            document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombreUsuario)} <span style="color: ${nuevoColor}">${nombreUsuario}</span>`;
+            document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombreUsuario)} <span style="color: ${nuevoColor}; font-weight: bold;">${nombreUsuario}</span>`;
             
             if(unsubGastos) unsubGastos(); if(unsubCompra) unsubCompra(); if(unsubLimpieza) unsubLimpieza(); if(unsubHistorial) unsubHistorial();
             mostrarDashboard(nombreUsuario, idPisoActual);
@@ -485,6 +496,7 @@ document.getElementById('btnCerrarTablon').addEventListener('click', () => { doc
 document.getElementById('btnAbrirHistorial').addEventListener('click', () => { window.scrollTo(0, 0); document.body.style.overflow = 'hidden'; document.getElementById('vistaHistorial').classList.remove('hidden'); });
 document.getElementById('btnCerrarHistorial').addEventListener('click', () => { document.body.style.overflow = 'auto'; document.getElementById('vistaHistorial').classList.add('hidden'); });
 
+// NUEVO: Lógica de borrado en lote para el historial
 document.getElementById('btnVaciarHistorial').addEventListener('click', async () => {
     const seguro = await window.mostrarConfirmacion("Vaciar Historial", "¿Seguro que quieres borrar todo el registro de actividad? Esto no se puede deshacer.");
     if (seguro) {
@@ -494,11 +506,13 @@ document.getElementById('btnVaciarHistorial').addEventListener('click', async ()
         try {
             const q = collection(db, "grupos", idPisoActual, "historial");
             const snap = await getDocs(q);
-            const borrados = [];
+            
+            const batch = writeBatch(db);
             snap.forEach(d => {
-                borrados.push(deleteDoc(doc(db, "grupos", idPisoActual, "historial", d.id)));
+                batch.delete(doc(db, "grupos", idPisoActual, "historial", d.id));
             });
-            await Promise.all(borrados);
+            await batch.commit();
+
             registrarActividad(`**${nombreUsuario}** vació el historial de actividad.`, "🧹");
         } catch (e) {
             await window.mostrarAlerta("Error", "No se pudo vaciar el historial.");
@@ -670,10 +684,14 @@ document.getElementById('btnGuardarGasto').addEventListener('click', async () =>
             await addDoc(collection(db, "grupos", idPisoActual, "gastos"), datosGasto); 
             registrarActividad(`**${nombreUsuario}** añadió un gasto de ${importe}€ (${concepto}).`, "💸");
             
+            // NUEVO: Borrado en lote (Batch) de la lista de la compra
             if (window.articulosPendientesDeBorrar && window.articulosPendientesDeBorrar.length > 0) {
+                const batch = writeBatch(db);
                 for (let idArticulo of window.articulosPendientesDeBorrar) {
-                    await deleteDoc(doc(db, "grupos", idPisoActual, "compra", idArticulo));
+                    const docRef = doc(db, "grupos", idPisoActual, "compra", idArticulo);
+                    batch.delete(docRef);
                 }
+                await batch.commit();
                 registrarActividad(`**${nombreUsuario}** convirtió la lista de la compra en un gasto.`, "🛍️");
                 window.articulosPendientesDeBorrar = []; 
             }
@@ -1145,7 +1163,6 @@ function generarRankingGlobal() {
     
     let html = "";
     asignaciones.forEach(a => {
-        // En lugar del color de la "categoría", forzamos que el borde lateral sea tu color personal elegido
         html += `
             <div style="background: rgba(255,255,255,0.03); border-radius: 12px; padding: 15px; margin-bottom: 12px; display: flex; align-items: center; border: 1px solid #2c2c2e; border-left: 4px solid ${getColor(a.nombre)};">
                 <div style="flex: 1; padding-right: 10px;">
