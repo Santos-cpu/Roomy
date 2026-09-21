@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, collection, addDoc, query, orderBy, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, collection, addDoc, query, orderBy, updateDoc, deleteDoc, onSnapshot, limit } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-messaging.js";
 
 const firebaseConfig = {
@@ -43,9 +43,28 @@ let ultimoPisoActivo = localStorage.getItem('ultimoPisoActivo');
 let unsubGastos = null;
 let unsubCompra = null;
 let unsubLimpieza = null;
+let unsubHistorial = null;
 let ultimosGastos = [];
 let ultimosBalances = {};
 let ultimosStrikes = {};
+
+// --- SISTEMA DE AVATARES ---
+window.avataresGrupo = {};
+function getAvatar(nombre) {
+    return window.avataresGrupo[nombre] || "👤";
+}
+
+// --- SISTEMA DE HISTORIAL DE ACTIVIDAD ---
+async function registrarActividad(mensaje, icono) {
+    if (!idPisoActual) return;
+    try {
+        await addDoc(collection(db, "grupos", idPisoActual, "historial"), {
+            mensaje: mensaje,
+            icono: icono,
+            fecha: Date.now()
+        });
+    } catch (e) { console.error("Error al registrar actividad", e); }
+}
 
 window.mostrarModal = function({ titulo, mensaje, tipo = 'alert', valorInput = '' }) {
     return new Promise((resolve) => {
@@ -216,8 +235,24 @@ document.getElementById('btnCrear').addEventListener('click', async () => {
     const idUnico = 'piso-' + Math.random().toString(36).substring(2, 8);
     const tablonInicial = { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" };
     
+    // Generador de avatares aleatorios
+    const emojis = ["🦊", "🐼", "🐵", "🐶", "🐱", "🐯", "🐨", "🐸", "🐷", "🐻", "🐰", "🦁", "🐮", "🐙", "🐢", "👽", "🤖", "👻", "🤡", "💩"];
+    const shuffled = emojis.sort(() => 0.5 - Math.random());
+    let avataresNuevos = {};
+    nombresNuevos.forEach((n, idx) => {
+        avataresNuevos[n] = shuffled[idx % shuffled.length];
+    });
+    
     try {
-        await setDoc(doc(db, "grupos", idUnico), { id: idUnico, nombre_piso: nombrePiso, creador: nombresNuevos[0], participantes: nombresNuevos, tablon: tablonInicial, fecha_creacion: new Date().toISOString() });
+        await setDoc(doc(db, "grupos", idUnico), { 
+            id: idUnico, 
+            nombre_piso: nombrePiso, 
+            creador: nombresNuevos[0], 
+            participantes: nombresNuevos, 
+            avatares: avataresNuevos,
+            tablon: tablonInicial, 
+            fecha_creacion: new Date().toISOString() 
+        });
         pantallaCrear.classList.add('hidden'); pantallaUnirse.classList.remove('hidden');
         document.getElementById('nombrePiso').value = ""; nombresNuevos = []; actualizarListaNuevosNombres();
         await cargarPantallaUnirse(idUnico);
@@ -236,9 +271,14 @@ async function cargarPantallaUnirse(id) {
             document.getElementById('tituloUnirse').innerText = `🏠 ${datosPiso.nombre_piso}`;
             const listaNombres = document.getElementById('listaNombres'); 
             listaNombres.innerHTML = ''; 
+            
+            // Asignar fallback temporal por si es un piso antiguo sin avatares
+            window.avataresGrupo = datosPiso.avatares || {};
+            
             datosPiso.participantes.forEach(nombre => {
                 const btn = document.createElement('button'); 
-                btn.innerText = nombre; btn.className = 'btn-name';
+                btn.innerText = `${getAvatar(nombre)} ${nombre}`; 
+                btn.className = 'btn-name';
                 btn.onclick = () => unirseYGuardar(nombre, id, datosPiso.nombre_piso); 
                 listaNombres.appendChild(btn);
             });
@@ -263,8 +303,10 @@ async function mostrarDashboard(nombre, id) {
     const docSnap = await getDoc(doc(db, "grupos", id));
     if (docSnap.exists()) {
         const datos = docSnap.data();
+        window.avataresGrupo = datos.avatares || {};
+        
         document.getElementById('tituloDashboard').innerText = datos.nombre_piso;
-        document.getElementById('nombreUsuarioActual').innerText = nombre;
+        document.getElementById('nombreUsuarioActual').innerText = `${getAvatar(nombre)} ${nombre}`;
         participantesGrupo = datos.participantes;
         
         cargarTablon(datos.tablon || { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" });
@@ -272,6 +314,7 @@ async function mostrarDashboard(nombre, id) {
         cargarListaGastos();
         cargarListaLimpieza();
         cargarListaCompra();
+        cargarHistorial();
         
         activarNotificacionesPush();
     }
@@ -280,7 +323,7 @@ async function mostrarDashboard(nombre, id) {
 document.getElementById('btnCambiarUsuario').addEventListener('click', async () => {
     const seguro = await window.mostrarConfirmacion("Cambiar de perfil", "¿Te has equivocado de nombre? Volverás a la selección de nombres.");
     if (seguro) {
-        if(unsubGastos) unsubGastos(); if(unsubCompra) unsubCompra(); if(unsubLimpieza) unsubLimpieza();
+        if(unsubGastos) unsubGastos(); if(unsubCompra) unsubCompra(); if(unsubLimpieza) unsubLimpieza(); if(unsubHistorial) unsubHistorial();
         localStorage.removeItem('ultimoPisoActivo');
         document.getElementById('pantallaDashboard').classList.add('hidden');
         document.body.classList.add('pantalla-centrada');
@@ -325,13 +368,42 @@ document.getElementById('tabRanking').addEventListener('click', () => activarPes
 document.getElementById('btnAbrirTablon').addEventListener('click', () => { window.scrollTo(0, 0); document.body.style.overflow = 'hidden'; document.getElementById('vistaTablon').classList.remove('hidden'); });
 document.getElementById('btnCerrarTablon').addEventListener('click', () => { document.body.style.overflow = 'auto'; document.getElementById('vistaTablon').classList.add('hidden'); });
 
+document.getElementById('btnAbrirHistorial').addEventListener('click', () => { window.scrollTo(0, 0); document.body.style.overflow = 'hidden'; document.getElementById('vistaHistorial').classList.remove('hidden'); });
+document.getElementById('btnCerrarHistorial').addEventListener('click', () => { document.body.style.overflow = 'auto'; document.getElementById('vistaHistorial').classList.add('hidden'); });
+
+function cargarHistorial() {
+    if (unsubHistorial) unsubHistorial();
+    const q = query(collection(db, "grupos", idPisoActual, "historial"), orderBy("fecha", "desc"), limit(60));
+    
+    unsubHistorial = onSnapshot(q, (snap) => {
+        const lista = document.getElementById('listaHistorial');
+        lista.innerHTML = '';
+        if (snap.empty) {
+            lista.innerHTML = '<p style="color:#86868b; text-align:center;">No hay actividad reciente.</p>';
+            return;
+        }
+        snap.forEach(doc => {
+            const act = doc.data();
+            const fechaStr = new Date(act.fecha).toLocaleString([], {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
+            lista.innerHTML += `
+                <div class="item-lista">
+                    <div style="font-size: 1.8em; margin-right: 15px;">${act.icono}</div>
+                    <div class="item-info">
+                        <span class="item-titulo">${act.mensaje}</span>
+                        <span class="item-detalle">${fechaStr}</span>
+                    </div>
+                </div>`;
+        });
+    });
+}
+
 // --- MÓDULO GASTOS ---
 function resetFormGasto() {
     idGastoEditando = null; document.getElementById('tituloFormGasto').innerText = 'Nuevo Gasto';
     document.getElementById('conceptoGasto').value = ''; document.getElementById('importeGasto').value = '';
     document.getElementById('btnGuardarGasto').innerText = 'Guardar'; document.getElementById('btnEliminarGasto').classList.add('hidden');
     document.getElementById('tipoDivisionGasto').value = 'iguales'; 
-    window.articulosPendientesDeBorrar = []; // Limpiamos caché de la compra
+    window.articulosPendientesDeBorrar = []; 
     prepararFormularioGastos();
 }
 
@@ -341,7 +413,7 @@ document.getElementById('btnMostrarFormGasto').addEventListener('click', () => {
 
 document.getElementById('btnCancelarGasto').addEventListener('click', () => {
     document.getElementById('formGasto').classList.add('hidden'); document.getElementById('btnMostrarFormGasto').classList.remove('hidden');
-    window.articulosPendientesDeBorrar = []; // Limpiar por si cancela la conversión
+    window.articulosPendientesDeBorrar = []; 
 });
 
 document.getElementById('tipoDivisionGasto').addEventListener('change', () => prepararFormularioGastos(idGastoEditando ? getGastoObjPorId(idGastoEditando) : null));
@@ -354,10 +426,9 @@ function prepararFormularioGastos(gastoObj = null) {
     const selectPagador = document.getElementById('pagadorGasto'); const divInvolucrados = document.getElementById('involucradosGasto');
     const tipoDiv = document.getElementById('tipoDivisionGasto').value; const infoManual = document.getElementById('infoDivisionManual');
     
-    // SIEMPRE renderizamos el listado de pagadores para evitar que se quede vacío
     selectPagador.innerHTML = ''; 
     participantesGrupo.forEach(p => { 
-        const opt = document.createElement('option'); opt.value = p; opt.innerText = p; 
+        const opt = document.createElement('option'); opt.value = p; opt.innerText = `${getAvatar(p)} ${p}`; 
         if (gastoObj && gastoObj.pagador === p) {
             opt.selected = true;
         } else if (!gastoObj && p === nombreUsuario) {
@@ -372,14 +443,14 @@ function prepararFormularioGastos(gastoObj = null) {
         participantesGrupo.forEach(p => {
             let checked = true;
             if (gastoObj && Array.isArray(gastoObj.involucrados)) checked = typeof gastoObj.involucrados[0] === 'string' ? gastoObj.involucrados.includes(p) : gastoObj.involucrados.some(i => i.nombre === p);
-            divInvolucrados.innerHTML += `<label><input type="checkbox" value="${p}" class="gasto-cb" ${checked ? 'checked' : ''}> ${p}</label>`;
+            divInvolucrados.innerHTML += `<label><input type="checkbox" value="${p}" class="gasto-cb" ${checked ? 'checked' : ''}> ${getAvatar(p)} ${p}</label>`;
         });
     } else {
         infoManual.classList.remove('hidden');
         participantesGrupo.forEach(p => {
             let val = '';
             if (gastoObj && Array.isArray(gastoObj.involucrados) && typeof gastoObj.involucrados[0] === 'object') { const found = gastoObj.involucrados.find(i => i.nombre === p); if (found) val = found.importe; }
-            divInvolucrados.innerHTML += `<div class="manual-split-row"><span>${p}</span><input type="number" class="manual-importe" data-nombre="${p}" step="0.01" min="0" placeholder="0.00" value="${val}"></div>`;
+            divInvolucrados.innerHTML += `<div class="manual-split-row"><span>${getAvatar(p)} ${p}</span><input type="number" class="manual-importe" data-nombre="${p}" step="0.01" min="0" placeholder="0.00" value="${val}"></div>`;
         });
         document.querySelectorAll('.manual-importe').forEach(inp => inp.addEventListener('input', calcularFaltanteManual));
         document.getElementById('importeGasto').addEventListener('input', calcularFaltanteManual);
@@ -410,7 +481,11 @@ document.getElementById('btnEliminarGasto').addEventListener('click', async () =
     const seguro = await window.mostrarConfirmacion("Eliminar Gasto", "¿Seguro que quieres eliminar este gasto? Afectará a las cuentas.");
     if (!seguro) return;
     const boton = document.getElementById('btnEliminarGasto'); boton.disabled = true;
-    try { await deleteDoc(doc(db, "grupos", idPisoActual, "gastos", idGastoEditando)); document.getElementById('btnCancelarGasto').click(); } 
+    try { 
+        await deleteDoc(doc(db, "grupos", idPisoActual, "gastos", idGastoEditando)); 
+        registrarActividad(`**${nombreUsuario}** eliminó un gasto del historial.`, "🗑️");
+        document.getElementById('btnCancelarGasto').click(); 
+    } 
     catch (error) { await window.mostrarAlerta("Error", "No se pudo eliminar."); } finally { boton.disabled = false; }
 });
 
@@ -446,15 +521,17 @@ document.getElementById('btnGuardarGasto').addEventListener('click', async () =>
     try {
         if (idGastoEditando) {
             await updateDoc(doc(db, "grupos", idPisoActual, "gastos", idGastoEditando), datosGasto);
+            registrarActividad(`**${nombreUsuario}** editó el gasto "${concepto}".`, "✏️");
         } else { 
             datosGasto.fecha = new Date().toISOString(); 
             await addDoc(collection(db, "grupos", idPisoActual, "gastos"), datosGasto); 
+            registrarActividad(`**${nombreUsuario}** añadió un gasto de ${importe}€ (${concepto}).`, "💸");
             
-            // Si venimos de la lista de la compra, borramos los artículos marcados
             if (window.articulosPendientesDeBorrar && window.articulosPendientesDeBorrar.length > 0) {
                 for (let idArticulo of window.articulosPendientesDeBorrar) {
                     await deleteDoc(doc(db, "grupos", idPisoActual, "compra", idArticulo));
                 }
+                registrarActividad(`**${nombreUsuario}** convirtió la lista de la compra en un gasto.`, "🛍️");
                 window.articulosPendientesDeBorrar = []; 
             }
         }
@@ -480,7 +557,7 @@ function cargarListaGastos() {
             const gasto = docSnap.data(); gasto.id = docSnap.id; ultimosGastos.push(gasto); 
             const divGasto = document.createElement('div'); divGasto.className = 'item-lista';
             const extraDetalle = typeof gasto.involucrados[0] === 'object' ? ' (Manual)' : '';
-            divGasto.innerHTML = `<div class="item-info"><span class="item-titulo">${gasto.concepto}</span><span class="item-detalle">${gasto.pagador} pagó para ${gasto.involucrados.length}${extraDetalle} • ${new Date(gasto.fecha).toLocaleDateString()}</span></div><div style="display: flex; align-items: center; gap: 12px;"><span class="gasto-importe">${gasto.importe.toFixed(2)}€</span><button type="button" style="background:none; border:none; padding:0; cursor:pointer; font-size:1.4em;" onclick='window.abrirEditarGasto(${JSON.stringify(gasto).replace(/'/g, "\\'")})'>✏️</button></div>`;
+            divGasto.innerHTML = `<div class="item-info"><span class="item-titulo">${gasto.concepto}</span><span class="item-detalle">${getAvatar(gasto.pagador)} ${gasto.pagador} pagó para ${gasto.involucrados.length}${extraDetalle} • ${new Date(gasto.fecha).toLocaleDateString()}</span></div><div style="display: flex; align-items: center; gap: 12px;"><span class="gasto-importe">${gasto.importe.toFixed(2)}€</span><button type="button" style="background:none; border:none; padding:0; cursor:pointer; font-size:1.4em;" onclick='window.abrirEditarGasto(${JSON.stringify(gasto).replace(/'/g, "\\'")})'>✏️</button></div>`;
             listaHtml.appendChild(divGasto);
         });
         calcularBalancesYDeudas(ultimosGastos);
@@ -500,7 +577,7 @@ function calcularBalancesYDeudas(gastos) {
     let htmlBalances = ''; let deudores = []; let acreedores = [];
     for (let persona in ultimosBalances) {
         let saldo = ultimosBalances[persona]; let color = saldo >= -0.01 && saldo <= 0.01 ? '#f5f5f7' : (saldo > 0 ? '#32d74b' : '#ff453a');
-        htmlBalances += `<div class="balance-item"><span>${persona}</span><span style="color: ${color}; font-weight: bold;">${saldo.toFixed(2)}€</span></div>`;
+        htmlBalances += `<div class="balance-item"><span>${getAvatar(persona)} ${persona}</span><span style="color: ${color}; font-weight: bold;">${saldo.toFixed(2)}€</span></div>`;
         if (saldo < -0.01) deudores.push({ nombre: persona, cantidad: Math.abs(saldo) });
         if (saldo > 0.01) acreedores.push({ nombre: persona, cantidad: saldo });
     }
@@ -512,7 +589,7 @@ function calcularBalancesYDeudas(gastos) {
     else {
         while (i < deudores.length && j < acreedores.length) {
             let deudor = deudores[i]; let acreedor = acreedores[j]; let transfer = Math.min(deudor.cantidad, acreedor.cantidad);
-            htmlDeudas += `<div class="deuda-item"><span>💸 <b style="color:#f5f5f7;">${deudor.nombre}</b> debe a <b style="color:#f5f5f7;">${acreedor.nombre}</b>: <br><b style="color:#0a84ff; font-size:1.1em;">${transfer.toFixed(2)}€</b></span><button class="btn-bizum" onclick="registrarBizum('${deudor.nombre}', '${acreedor.nombre}', ${transfer})">Bizum hecho</button></div>`;
+            htmlDeudas += `<div class="deuda-item"><span>💸 <b style="color:#f5f5f7;">${getAvatar(deudor.nombre)} ${deudor.nombre}</b> debe a <b style="color:#f5f5f7;">${getAvatar(acreedor.nombre)} ${acreedor.nombre}</b>: <br><b style="color:#0a84ff; font-size:1.1em;">${transfer.toFixed(2)}€</b></span><button class="btn-bizum" onclick="registrarBizum('${deudor.nombre}', '${acreedor.nombre}', ${transfer})">Bizum hecho</button></div>`;
             deudor.cantidad -= transfer; acreedor.cantidad -= transfer;
             if (deudor.cantidad < 0.01) i++; if (acreedor.cantidad < 0.01) j++;
         }
@@ -529,6 +606,7 @@ window.registrarBizum = async function(deudor, acreedor, cantidad) {
             concepto: `💸 Bizum de ${deudor}`, importe: parseFloat(cantidad), pagador: deudor,
             involucrados: [{ nombre: acreedor, importe: parseFloat(cantidad) }], fecha: new Date().toISOString()
         });
+        registrarActividad(`**${deudor}** ha saldado una cuenta de ${cantidad.toFixed(2)}€ a **${acreedor}**.`, "🤝");
     } catch(e) { await window.mostrarAlerta("Error", "No se pudo registrar el pago."); }
 };
 
@@ -537,6 +615,7 @@ document.getElementById('btnAñadirArticulo').addEventListener('click', async ()
     const input = document.getElementById('inputNuevoArticulo'); const articulo = input.value.trim();
     if (!articulo) return; input.value = '';
     await addDoc(collection(db, "grupos", idPisoActual, "compra"), { articulo: articulo, añadidoPor: nombreUsuario, fecha: new Date().toISOString() });
+    registrarActividad(`**${nombreUsuario}** añadió "${articulo}" a la lista de la compra.`, "🛒");
 });
 
 function cargarListaCompra() {
@@ -549,12 +628,15 @@ function cargarListaCompra() {
         document.getElementById('btnComprarSeleccionados').disabled = false; listaHtml.innerHTML = '';
         querySnapshot.forEach(docSnap => {
             const item = docSnap.data();
-            listaHtml.innerHTML += `<div class="manual-split-row" style="margin-bottom: 8px;"><label style="flex:1; display:flex; align-items:center; gap:10px; cursor:pointer;"><input type="checkbox" class="cb-articulo" value="${docSnap.id}" data-nombre="${item.articulo}"><span>${item.articulo} <small style="color:#86868b; display:block; font-size:0.8em;">Por ${item.añadidoPor}</small></span></label><button type="button" onclick="borrarArticulo('${docSnap.id}')" style="background:none; width:auto; margin:0; padding:5px; color:#ff453a; font-size:1.2em;">🗑️</button></div>`;
+            listaHtml.innerHTML += `<div class="manual-split-row" style="margin-bottom: 8px;"><label style="flex:1; display:flex; align-items:center; gap:10px; cursor:pointer;"><input type="checkbox" class="cb-articulo" value="${docSnap.id}" data-nombre="${item.articulo}"><span>${item.articulo} <small style="color:#86868b; display:block; font-size:0.8em;">Por ${getAvatar(item.añadidoPor)} ${item.añadidoPor}</small></span></label><button type="button" onclick="borrarArticulo('${docSnap.id}', '${item.articulo.replace(/'/g, "\\'")}')" style="background:none; width:auto; margin:0; padding:5px; color:#ff453a; font-size:1.2em;">🗑️</button></div>`;
         });
     });
 }
 
-window.borrarArticulo = async function(id) { await deleteDoc(doc(db, "grupos", idPisoActual, "compra", id)); };
+window.borrarArticulo = async function(id, nombreArticulo) { 
+    await deleteDoc(doc(db, "grupos", idPisoActual, "compra", id)); 
+    registrarActividad(`**${nombreUsuario}** tachó "${nombreArticulo}" de la compra.`, "✔️");
+};
 
 document.getElementById('btnComprarSeleccionados').addEventListener('click', async () => {
     const seleccionados = Array.from(document.querySelectorAll('.cb-articulo:checked'));
@@ -563,10 +645,9 @@ document.getElementById('btnComprarSeleccionados').addEventListener('click', asy
     const nombresArticulos = seleccionados.map(cb => cb.getAttribute('data-nombre')).join(', ');
     const conceptoStr = nombresArticulos.length > 40 ? nombresArticulos.substring(0, 37) + '...' : nombresArticulos;
     
-    // Redirigir al formulario de Gasto
     resetFormGasto();
     document.getElementById('conceptoGasto').value = "🛒 Compra: " + conceptoStr;
-    window.articulosPendientesDeBorrar = seleccionados.map(cb => cb.value); // Guardamos los IDs temporalmente
+    window.articulosPendientesDeBorrar = seleccionados.map(cb => cb.value); 
     
     activarPestaña('tabGastos', 'vistaGastos');
     document.getElementById('formGasto').classList.remove('hidden');
@@ -580,7 +661,7 @@ function resetFormZona() {
     document.getElementById('nombreZona').value = ''; document.getElementById('frecuenciaZona').value = '1';
     document.getElementById('btnGuardarZona').innerText = 'Guardar'; document.getElementById('btnEliminarZona').classList.add('hidden');
     const div = document.getElementById('responsablesZona'); div.innerHTML = '';
-    participantesGrupo.forEach(p => div.innerHTML += `<label><input type="checkbox" value="${p}" checked> ${p}</label>`);
+    participantesGrupo.forEach(p => div.innerHTML += `<label><input type="checkbox" value="${p}" checked> ${getAvatar(p)} ${p}</label>`);
 }
 
 document.getElementById('btnMostrarFormZona').addEventListener('click', () => {
@@ -605,7 +686,11 @@ window.abrirEditarZona = function(idZona) {
 document.getElementById('btnEliminarZona').addEventListener('click', async () => {
     const seguro = await window.mostrarConfirmacion("Eliminar Zona", "¿Borrar esta zona de limpieza definitivamente?");
     if (!seguro) return;
-    try { await deleteDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZonaEditando)); document.getElementById('btnCancelarZona').click(); } catch (e) { await window.mostrarAlerta("Error", "No se pudo borrar."); }
+    try { 
+        await deleteDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZonaEditando)); 
+        registrarActividad(`**${nombreUsuario}** eliminó una zona de limpieza.`, "🗑️");
+        document.getElementById('btnCancelarZona').click(); 
+    } catch (e) { await window.mostrarAlerta("Error", "No se pudo borrar."); }
 });
 
 function obtenerLunes(fecha) {
@@ -620,15 +705,24 @@ document.getElementById('btnGuardarZona').addEventListener('click', async () => 
     if (!nombreZona || resp.length === 0) return await window.mostrarAlerta("Faltan datos", "Indica el nombre y quién limpia.");
     btn.disabled = true; const datos = { nombre_zona: nombreZona, responsables: resp, frecuencia: freq };
     try {
-        if (idZonaEditando) await updateDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZonaEditando), datos);
-        else { datos.fecha_base = new Date(obtenerLunes(new Date())).toISOString(); await addDoc(collection(db, "grupos", idPisoActual, "zonas_limpieza"), datos); }
+        if (idZonaEditando) {
+            await updateDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZonaEditando), datos);
+            registrarActividad(`**${nombreUsuario}** modificó la limpieza del ${nombreZona}.`, "✏️");
+        } else { 
+            datos.fecha_base = new Date(obtenerLunes(new Date())).toISOString(); 
+            await addDoc(collection(db, "grupos", idPisoActual, "zonas_limpieza"), datos); 
+            registrarActividad(`**${nombreUsuario}** creó la tarea de limpieza: ${nombreZona}.`, "🧹");
+        }
         document.getElementById('btnCancelarZona').click();
     } catch (e) { await window.mostrarAlerta("Error", "Fallo al guardar."); } finally { btn.disabled = false; }
 });
 
-window.marcarLimpieza = async function(idZona, timestamp, esTarde = false) {
+window.marcarLimpieza = async function(idZona, timestamp, esTarde = false, nombreZona = '') {
     let valor = esTarde ? `${nombreUsuario}_Tarde` : nombreUsuario;
-    try { await updateDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZona), { [`semanas_hechas.${timestamp}`]: valor }); } 
+    try { 
+        await updateDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZona), { [`semanas_hechas.${timestamp}`]: valor }); 
+        registrarActividad(`**${nombreUsuario}** confirmó la limpieza del ${nombreZona}.`, esTarde ? "⚠️" : "✨");
+    } 
     catch (e) { await window.mostrarAlerta("Error", "No se pudo confirmar."); }
 };
 
@@ -694,7 +788,6 @@ function renderVistaSemanaActual() {
     const tsActual = new Date(obtenerLunes(new Date())).getTime();
     let html = '';
 
-    // 1. Tareas Atrasadas (semanas anteriores) solo para el usuario actual
     let minTime = Math.min(...zonasLimpiezaCache.map(z => new Date(z.fecha_base).getTime()));
     if (zonasLimpiezaCache.length > 0 && isFinite(minTime)) {
         let t = minTime;
@@ -712,7 +805,7 @@ function renderVistaSemanaActual() {
                                 </div>
                                 <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
                                     <div style="font-weight: 600; font-size: 0.85em; color: #ff453a">Falta registrada</div>
-                                    <button type="button" class="btn-bizum" style="background:#ff453a; color:white; border:none; padding:6px 12px; border-radius:8px; font-weight:bold;" onclick="marcarLimpieza('${a.idZona}', ${t}, true)">Marcar hecha</button>
+                                    <button type="button" class="btn-bizum" style="background:#ff453a; color:white; border:none; padding:6px 12px; border-radius:8px; font-weight:bold;" onclick="marcarLimpieza('${a.idZona}', ${t}, true, '${a.nombre_zona.replace(/'/g, "\\'")}')">Marcar hecha</button>
                                 </div>
                             </div>`;
                     }
@@ -722,7 +815,6 @@ function renderVistaSemanaActual() {
         }
     }
 
-    // 2. Tareas de esta semana (para todos)
     const asigs = calcularAsignacionesParaSemana(new Date(tsActual)); 
     if(asigs.length === 0 && html === '') return list.innerHTML = '<p style="color:#86868b; text-align:center;">Semana libre. No toca limpiar nada.</p>';
     
@@ -737,7 +829,7 @@ function renderVistaSemanaActual() {
             botonHTML = `<span style="color:#32d74b; font-weight:bold; font-size:0.9em;">✅ Completada</span>`; 
         } 
         else if (esMi) { 
-            botonHTML = `<button type="button" class="btn-bizum" onclick="marcarLimpieza('${a.idZona}', ${tsActual}, false)">Confirmar</button>`; 
+            botonHTML = `<button type="button" class="btn-bizum" onclick="marcarLimpieza('${a.idZona}', ${tsActual}, false, '${a.nombre_zona.replace(/'/g, "\\'")}')">Confirmar</button>`; 
         }
         else { 
             botonHTML = `<span style="color:#86868b; font-size:0.9em;">Pendiente...</span>`; 
@@ -747,10 +839,10 @@ function renderVistaSemanaActual() {
             <div class="item-lista ${esMi && !estaHecha ? 'mi-turno' : ''}">
                 <div class="item-info">
                     <span class="item-titulo">${a.nombre_zona} <span style="font-size:0.75em; color:#86868b; font-weight:normal;">(Cada ${a.freq} sem)</span></span>
-                    <span class="item-detalle">Rotación: ${a.responsables.join(' ➔ ')}</span>
+                    <span class="item-detalle">Rotación: ${a.responsables.map(r => getAvatar(r) + " " + r).join(' ➔ ')}</span>
                 </div>
                 <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
-                    <div style="font-weight: 600; font-size: 1.1em; color: ${esMi ? '#32d74b' : '#f5f5f7'}">${esMi ? '¡Te toca!' : a.leTocaA}</div>
+                    <div style="font-weight: 600; font-size: 1.1em; color: ${esMi ? '#32d74b' : '#f5f5f7'}">${esMi ? '¡Te toca!' : getAvatar(a.leTocaA) + ' ' + a.leTocaA}</div>
                     <div style="display:flex; align-items:center; gap: 10px;">
                         ${botonHTML}
                         <button type="button" style="background:none; border:none; padding:0; cursor:pointer; font-size:1.4em;" onclick='window.abrirEditarZona("${a.idZona}")'>✏️</button>
@@ -782,7 +874,7 @@ function renderCalendarioMensual() {
             let hechas = a.zonaRef.semanas_hechas || {}; 
             let conf = hechas[l.getTime()]; 
             let check = conf ? (String(conf).includes('_Tarde') ? '☑️ ' : '✅ ') : '';
-            html += `<div style="display:flex; justify-content:space-between; margin-bottom:8px; ${esM && !conf ? 'background: rgba(50, 215, 75, 0.15); padding: 6px 10px; border-radius: 8px; border-left: 3px solid #32d74b;' : 'padding: 6px 10px;'}"><span style="font-weight:600;">${a.nombre_zona}</span><span style="color:${esM && !conf ? '#32d74b' : '#86868b'}; font-weight:${esM ? 'bold' : 'normal'};">${check}${esM ? '¡Te toca!' : a.leTocaA}</span></div>`;
+            html += `<div style="display:flex; justify-content:space-between; margin-bottom:8px; ${esM && !conf ? 'background: rgba(50, 215, 75, 0.15); padding: 6px 10px; border-radius: 8px; border-left: 3px solid #32d74b;' : 'padding: 6px 10px;'}"><span style="font-weight:600;">${a.nombre_zona}</span><span style="color:${esM && !conf ? '#32d74b' : '#86868b'}; font-weight:${esM ? 'bold' : 'normal'};">${check}${esM ? '¡Te toca!' : getAvatar(a.leTocaA) + ' ' + a.leTocaA}</span></div>`;
         });
         cont.innerHTML += html + `</div>`;
     });
@@ -898,7 +990,6 @@ function generarRankingGlobal() {
         { t: "El Superviviente", d: "Se iría de vivac al monte antes que fregar los platos.", c: '#32d74b', e: "🏕️" }
     ];
 
-    // Barajamos los títulos estándar para que cada día toquen diferentes a los usuarios base
     titulosExtra.sort(() => Math.random() - 0.5);
     
     usuarios.forEach(u => {
@@ -915,7 +1006,7 @@ function generarRankingGlobal() {
             <div style="background: rgba(255,255,255,0.03); border-radius: 12px; padding: 15px; margin-bottom: 12px; display: flex; align-items: center; border: 1px solid #2c2c2e; border-left: 4px solid ${a.color};">
                 <div style="flex: 1; padding-right: 10px;">
                     <div style="font-size: 0.85em; color: ${a.color}; font-weight: 700; text-transform: uppercase;">${a.titulo}</div>
-                    <div style="font-size: 1.25em; font-weight: bold; color: #f5f5f7; margin: 2px 0;">${a.nombre}</div>
+                    <div style="font-size: 1.25em; font-weight: bold; color: #f5f5f7; margin: 2px 0;">${getAvatar(a.nombre)} ${a.nombre}</div>
                     <div style="font-size: 0.8em; color: #86868b; line-height: 1.3;">${a.desc}</div>
                 </div>
                 <div style="font-size: 2.8em; margin-left: auto; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));">${a.emoji}</div>
@@ -930,6 +1021,7 @@ document.getElementById('btnVolverMenu').addEventListener('click', () => {
     if(typeof unsubGastos !== 'undefined' && unsubGastos) unsubGastos(); 
     if(typeof unsubCompra !== 'undefined' && unsubCompra) unsubCompra(); 
     if(typeof unsubLimpieza !== 'undefined' && unsubLimpieza) unsubLimpieza();
+    if(typeof unsubHistorial !== 'undefined' && unsubHistorial) unsubHistorial();
     localStorage.removeItem('ultimoPisoActivo'); 
     window.location.reload(); 
 });
