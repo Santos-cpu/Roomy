@@ -602,8 +602,9 @@ document.getElementById('btnGuardarZona').addEventListener('click', async () => 
     } catch (e) { await window.mostrarAlerta("Error", "Fallo al guardar."); } finally { btn.disabled = false; }
 });
 
-window.marcarLimpieza = async function(idZona, timestamp) {
-    try { await updateDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZona), { [`semanas_hechas.${timestamp}`]: nombreUsuario }); } 
+window.marcarLimpieza = async function(idZona, timestamp, esTarde = false) {
+    let valor = esTarde ? `${nombreUsuario}_Tarde` : nombreUsuario;
+    try { await updateDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZona), { [`semanas_hechas.${timestamp}`]: valor }); } 
     catch (e) { await window.mostrarAlerta("Error", "No se pudo confirmar."); }
 };
 
@@ -623,7 +624,10 @@ function cargarListaLimpieza() {
                 let asigs = calcularAsignacionesParaSemana(new Date(t));
                 asigs.forEach(a => {
                     let hechas = a.zonaRef.semanas_hechas || {};
-                    if (!hechas[t]) ultimosStrikes[a.leTocaA]++;
+                    let conf = hechas[t];
+                    if (!conf || String(conf).includes('_Tarde')) {
+                        ultimosStrikes[a.leTocaA]++;
+                    }
                 });
                 t += 7 * 86400000;
             }
@@ -662,20 +666,60 @@ function calcularAsignacionesParaSemana(fechaLunes) {
 function renderVistaSemanaActual() {
     const list = document.getElementById('listaLimpieza');
     if (zonasLimpiezaCache.length === 0) return list.innerHTML = '<p style="color:#86868b; text-align:center;">No hay zonas.</p>';
+    
     const tsActual = new Date(obtenerLunes(new Date())).getTime();
+    let html = '';
+
+    // 1. Tareas Atrasadas (semanas anteriores) solo para el usuario actual
+    let minTime = Math.min(...zonasLimpiezaCache.map(z => new Date(z.fecha_base).getTime()));
+    if (zonasLimpiezaCache.length > 0 && isFinite(minTime)) {
+        let t = minTime;
+        while (t < tsActual) {
+            let asigsPasadas = calcularAsignacionesParaSemana(new Date(t));
+            asigsPasadas.forEach(a => {
+                if (a.leTocaA === nombreUsuario) {
+                    let hechas = a.zonaRef.semanas_hechas || {};
+                    if (!hechas[t]) {
+                        html += `
+                            <div class="item-lista" style="background-color: rgba(255, 69, 58, 0.15); padding: 10px; border-radius: 10px; border-left: 4px solid #ff453a; margin-bottom: 8px; border-bottom: none;">
+                                <div class="item-info">
+                                    <span class="item-titulo" style="color: #ff453a;">⚠️ Atrasada: ${a.nombre_zona}</span>
+                                    <span class="item-detalle">Era de la semana del ${new Date(t).toLocaleDateString()}</span>
+                                </div>
+                                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+                                    <div style="font-weight: 600; font-size: 0.85em; color: #ff453a">Falta registrada</div>
+                                    <button type="button" class="btn-bizum" style="background:#ff453a; color:white; border:none; padding:6px 12px; border-radius:8px; font-weight:bold;" onclick="marcarLimpieza('${a.idZona}', ${t}, true)">Marcar hecha</button>
+                                </div>
+                            </div>`;
+                    }
+                }
+            });
+            t += 7 * 86400000;
+        }
+    }
+
+    // 2. Tareas de esta semana (para todos)
     const asigs = calcularAsignacionesParaSemana(new Date(tsActual)); 
-    list.innerHTML = '';
-    if(asigs.length === 0) return list.innerHTML = '<p style="color:#86868b; text-align:center;">Semana libre. No toca limpiar nada.</p>';
+    if(asigs.length === 0 && html === '') return list.innerHTML = '<p style="color:#86868b; text-align:center;">Semana libre. No toca limpiar nada.</p>';
     
     asigs.forEach(a => {
         const esMi = a.leTocaA === nombreUsuario;
-        let hechas = a.zonaRef.semanas_hechas || {}; let estaHecha = hechas[tsActual] ? true : false;
+        let hechas = a.zonaRef.semanas_hechas || {}; 
+        let conf = hechas[tsActual];
+        let estaHecha = !!conf;
         
         let botonHTML = "";
-        if (estaHecha) { botonHTML = `<span style="color:#32d74b; font-weight:bold; font-size:0.9em;">✅ Completada</span>`; } 
-        else if (esMi) { botonHTML = `<button type="button" class="btn-bizum" onclick="marcarLimpieza('${a.idZona}', ${tsActual})">Confirmar</button>`; }
-        else { botonHTML = `<span style="color:#86868b; font-size:0.9em;">Pendiente...</span>`; }
-        list.innerHTML += `
+        if (estaHecha) { 
+            botonHTML = `<span style="color:#32d74b; font-weight:bold; font-size:0.9em;">✅ Completada</span>`; 
+        } 
+        else if (esMi) { 
+            botonHTML = `<button type="button" class="btn-bizum" onclick="marcarLimpieza('${a.idZona}', ${tsActual}, false)">Confirmar</button>`; 
+        }
+        else { 
+            botonHTML = `<span style="color:#86868b; font-size:0.9em;">Pendiente...</span>`; 
+        }
+        
+        html += `
             <div class="item-lista ${esMi && !estaHecha ? 'mi-turno' : ''}">
                 <div class="item-info">
                     <span class="item-titulo">${a.nombre_zona} <span style="font-size:0.75em; color:#86868b; font-weight:normal;">(Cada ${a.freq} sem)</span></span>
@@ -690,6 +734,8 @@ function renderVistaSemanaActual() {
                 </div>
             </div>`;
     });
+    
+    list.innerHTML = html;
 }
 
 function renderCalendarioMensual() {
@@ -708,8 +754,11 @@ function renderCalendarioMensual() {
         
         let html = `<div style="background:#1c1c1e; border:${esHoy ? '2px solid #32d74b' : '1px solid #2c2c2e'}; border-radius:12px; padding:14px; margin-bottom:15px;"><h5 style="color:#0a84ff; border-bottom:1px solid #2c2c2e; padding-bottom:8px; font-size:1em;">🗓️ Del ${l.getDate()} ${nombres[l.getMonth()].substring(0,3)} al ${dom.getDate()} ${nombres[dom.getMonth()].substring(0,3)} ${esHoy ? '<span style="background:#32d74b; color:#000; padding:2px 6px; border-radius:10px; font-size:0.7em; margin-left:5px;">Actual</span>' : ''}</h5>`;
         asigsSem.forEach(a => {
-            const esM = a.leTocaA === nombreUsuario; let hechas = a.zonaRef.semanas_hechas || {}; let check = hechas[l.getTime()] ? '✅ ' : '';
-            html += `<div style="display:flex; justify-content:space-between; margin-bottom:8px; ${esM && !check ? 'background: rgba(50, 215, 75, 0.15); padding: 6px 10px; border-radius: 8px; border-left: 3px solid #32d74b;' : 'padding: 6px 10px;'}"><span style="font-weight:600;">${a.nombre_zona}</span><span style="color:${esM && !check ? '#32d74b' : '#86868b'}; font-weight:${esM ? 'bold' : 'normal'};">${check}${esM ? '¡Te toca!' : a.leTocaA}</span></div>`;
+            const esM = a.leTocaA === nombreUsuario; 
+            let hechas = a.zonaRef.semanas_hechas || {}; 
+            let conf = hechas[l.getTime()]; 
+            let check = conf ? (String(conf).includes('_Tarde') ? '☑️ ' : '✅ ') : '';
+            html += `<div style="display:flex; justify-content:space-between; margin-bottom:8px; ${esM && !conf ? 'background: rgba(50, 215, 75, 0.15); padding: 6px 10px; border-radius: 8px; border-left: 3px solid #32d74b;' : 'padding: 6px 10px;'}"><span style="font-weight:600;">${a.nombre_zona}</span><span style="color:${esM && !conf ? '#32d74b' : '#86868b'}; font-weight:${esM ? 'bold' : 'normal'};">${check}${esM ? '¡Te toca!' : a.leTocaA}</span></div>`;
         });
         cont.innerHTML += html + `</div>`;
     });
