@@ -255,7 +255,6 @@ document.getElementById('btnCrear').addEventListener('click', async () => {
     const idUnico = 'piso-' + Math.random().toString(36).substring(2, 8);
     const tablonInicial = { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" };
     
-    // Generador de avatares y colores aleatorios al crear un piso nuevo
     const emojis = ["🦊", "🐼", "🐵", "🐶", "🐱", "🐯", "🐨", "🐸", "🐷", "🐻", "🐰", "🦁", "🐮", "🐙", "🐢", "👽", "🤖", "👻", "🤡", "💩"];
     const hexColors = ["#ff453a", "#ff9f0a", "#ffd60a", "#32d74b", "#66d4cf", "#0a84ff", "#bf5af2", "#ff375f", "#a2845e", "#86868b"];
     const shuffledEmojis = emojis.sort(() => 0.5 - Math.random());
@@ -305,7 +304,7 @@ async function cargarPantallaUnirse(id) {
                 const btn = document.createElement('button'); 
                 btn.innerText = `${getAvatar(nombre)} ${nombre}`; 
                 btn.className = 'btn-name';
-                btn.style.borderColor = getColor(nombre); // Para que se vea su color en la lista
+                btn.style.borderColor = getColor(nombre); 
                 btn.onclick = () => unirseYGuardar(nombre, id, datosPiso.nombre_piso); 
                 listaNombres.appendChild(btn);
             });
