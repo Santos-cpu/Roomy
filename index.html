@@ -117,32 +117,31 @@
                 <div style="display: flex; align-items: flex-start; gap: 6px;">
                     <button id="btnCopiarEnlace" class="btn-header" style="font-size: 1.1em; height: 36px; margin: 0;">🔗</button>
                     
-                    <!-- Menú desplegable de perfil -->
-                    <div style="position: relative;" id="contenedorMenuPerfil">
-                        <button id="btnPerfil" class="btn-header" style="height: 36px; margin: 0; padding: 0 12px;">
-                            <span id="nombreUsuarioActual" style="font-size: 1.05em;"></span>
-                        </button>
-                        <div id="menuPerfil" class="hidden" style="position: absolute; top: 100%; right: 0; margin-top: 8px; background: #2c2c2e; border: 1px solid #3a3a3c; border-radius: 12px; width: 190px; box-shadow: 0 8px 20px rgba(0,0,0,0.6); z-index: 200; overflow: hidden;">
-                            <div id="btnCambiarAvatar" class="menu-item" style="border-bottom: 1px solid #3a3a3c;">
-                                <span style="font-size: 1.2em;">😎</span> <span style="color: #f5f5f7; font-size: 0.9em; font-weight: 500;">Cambiar Avatar</span>
-                            </div>
-                            <div id="btnCambiarColor" class="menu-item" style="border-bottom: 1px solid #3a3a3c;">
-                                <span style="font-size: 1.2em;">🎨</span> <span style="color: #f5f5f7; font-size: 0.9em; font-weight: 500;">Elegir Color</span>
-                            </div>
-                            <div id="btnCambiarUsuarioMenu" class="menu-item" style="color: #ff453a;">
-                                <span style="font-size: 1.2em;">🔄</span> <span style="font-size: 0.9em; font-weight: 500;">Cambiar cuenta</span>
+                    <!-- REESTRUCTURACIÓN: Columna Perfil + Gráficos -->
+                    <div style="display: flex; flex-direction: column; gap: 6px; flex: 1;">
+                        <div style="position: relative;" id="contenedorMenuPerfil">
+                            <button id="btnPerfil" class="btn-header" style="height: 36px; margin: 0; padding: 0 12px; width: 100%;">
+                                <span id="nombreUsuarioActual" style="font-size: 1.05em;"></span>
+                            </button>
+                            <div id="menuPerfil" class="hidden" style="position: absolute; top: 100%; right: 0; margin-top: 8px; background: #2c2c2e; border: 1px solid #3a3a3c; border-radius: 12px; width: 190px; box-shadow: 0 8px 20px rgba(0,0,0,0.6); z-index: 200; overflow: hidden;">
+                                <div id="btnCambiarAvatar" class="menu-item" style="border-bottom: 1px solid #3a3a3c;">
+                                    <span style="font-size: 1.2em;">😎</span> <span style="color: #f5f5f7; font-size: 0.9em; font-weight: 500;">Cambiar Avatar</span>
+                                </div>
+                                <div id="btnCambiarColor" class="menu-item" style="border-bottom: 1px solid #3a3a3c;">
+                                    <span style="font-size: 1.2em;">🎨</span> <span style="color: #f5f5f7; font-size: 0.9em; font-weight: 500;">Elegir Color</span>
+                                </div>
+                                <div id="btnCambiarUsuarioMenu" class="menu-item" style="color: #ff453a;">
+                                    <span style="font-size: 1.2em;">🔄</span> <span style="font-size: 0.9em; font-weight: 500;">Cambiar cuenta</span>
+                                </div>
                             </div>
                         </div>
+                        <button id="btnAbrirGraficos" class="btn-header" style="font-size: 1.2em; height: 36px; margin: 0; width: 100%;">📊</button>
                     </div>
 
-                    <!-- Columna para Tablón, Gráficos y Campanita -->
+                    <!-- REESTRUCTURACIÓN: Columna Tablón + Campanita -->
                     <div style="display: flex; flex-direction: column; gap: 6px;">
                         <button id="btnAbrirTablon" class="btn-header" style="font-size: 1.2em; padding: 0 12px; height: 36px; margin: 0;">📌</button>
-                        <div style="display: flex; gap: 6px;">
-                            <!-- NUEVO: Botón Gráficos -->
-                            <button id="btnAbrirGraficos" class="btn-header" style="font-size: 1.2em; padding: 0 12px; height: 36px; margin: 0; flex: 1;">📊</button>
-                            <button id="btnAbrirHistorial" class="btn-header" style="font-size: 1.2em; padding: 0 12px; height: 36px; margin: 0; flex: 1;">🔔</button>
-                        </div>
+                        <button id="btnAbrirHistorial" class="btn-header" style="font-size: 1.2em; padding: 0 12px; height: 36px; margin: 0;">🔔</button>
                     </div>
                 </div>
             </div>
@@ -167,7 +166,6 @@
                     <input type="text" id="conceptoGasto" placeholder="Concepto (Ej. Mercadona)">
                     <input type="number" id="importeGasto" placeholder="Importe total (€)" step="0.01" min="0">
                     
-                    <!-- NUEVO: Categorías -->
                     <label style="color: #86868b; font-size: 0.9em; display: block; margin-bottom: 10px;">Categoría:</label>
                     <select id="categoriaGasto">
                         <option value="🏠 Piso">🏠 Piso</option>
@@ -343,7 +341,7 @@
             </div>
         </div>
 
-        <!-- NUEVO: VISTA ESPECIAL: GRÁFICOS -->
+        <!-- VISTA ESPECIAL: GRÁFICOS -->
         <div id="vistaGraficos" class="hidden" style="background: #000; position: absolute; top: 0; left: 0; width: 100%; min-height: 100%; z-index: 100; padding: 20px; box-sizing: border-box; overflow-y: auto;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; padding-top: 10px; position: sticky; top: 0; background: #000; z-index: 101; padding-bottom: 10px;">
                 <h2 style="margin: 0; font-size: 1.5em; font-weight: 700;">📊 Gráficos</h2>
@@ -355,6 +353,11 @@
                 <div style="position: relative; width: 100%; max-width: 250px; margin: 0 auto;">
                     <canvas id="chartMisGastos"></canvas>
                 </div>
+                <div style="display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; margin-top: 15px; font-size: 0.9em;">
+                    <div style="color: #32d74b;">🏠 Piso: <br><span id="misG-piso" style="font-weight:bold; color:#f5f5f7;">0.00€</span></div>
+                    <div style="color: #ff9f0a;">💡 Facturas: <br><span id="misG-facturas" style="font-weight:bold; color:#f5f5f7;">0.00€</span></div>
+                    <div style="color: #0a84ff;">🍻 Ocio: <br><span id="misG-ocio" style="font-weight:bold; color:#f5f5f7;">0.00€</span></div>
+                </div>
                 <p id="totalMisGastos" style="font-size: 1.2em; font-weight: bold; margin-top: 15px; color: #f5f5f7;"></p>
             </div>
             
@@ -362,6 +365,11 @@
                 <h4 style="margin-bottom: 15px;">Gastos Globales del Piso</h4>
                 <div style="position: relative; width: 100%; max-width: 250px; margin: 0 auto;">
                     <canvas id="chartPisoGastos"></canvas>
+                </div>
+                <div style="display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; margin-top: 15px; font-size: 0.9em;">
+                    <div style="color: #32d74b;">🏠 Piso: <br><span id="pisoG-piso" style="font-weight:bold; color:#f5f5f7;">0.00€</span></div>
+                    <div style="color: #ff9f0a;">💡 Facturas: <br><span id="pisoG-facturas" style="font-weight:bold; color:#f5f5f7;">0.00€</span></div>
+                    <div style="color: #0a84ff;">🍻 Ocio: <br><span id="pisoG-ocio" style="font-weight:bold; color:#f5f5f7;">0.00€</span></div>
                 </div>
                 <p id="totalPisoGastos" style="font-size: 1.2em; font-weight: bold; margin-top: 15px; color: #f5f5f7;"></p>
             </div>
