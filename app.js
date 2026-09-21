@@ -15,7 +15,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// NUEVO: Soporte Offline de Firestore activado
 enableIndexedDbPersistence(db).catch((err) => {
     if (err.code == 'failed-precondition') {
         console.warn('Persistencia: Varias pestañas abiertas.');
@@ -58,6 +57,10 @@ let unsubHistorial = null;
 let ultimosGastos = [];
 let ultimosBalances = {};
 let ultimosStrikes = {};
+
+// Instancias de Chart.js
+let chartMisGastosObj = null;
+let chartPisoGastosObj = null;
 
 // --- SISTEMA DE AVATARES Y COLORES ---
 window.avataresGrupo = {};
@@ -252,7 +255,6 @@ document.getElementById('btnCrear').addEventListener('click', async () => {
     const idUnico = 'piso-' + Math.random().toString(36).substring(2, 8);
     const tablonInicial = { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" };
     
-    // Generador de avatares y colores aleatorios al crear un piso nuevo
     const emojis = ["🦊", "🐼", "🐵", "🐶", "🐱", "🐯", "🐨", "🐸", "🐷", "🐻", "🐰", "🦁", "🐮", "🐙", "🐢", "👽", "🤖", "👻", "🤡", "💩"];
     const hexColors = ["#ff453a", "#ff9f0a", "#ffd60a", "#32d74b", "#66d4cf", "#0a84ff", "#bf5af2", "#ff375f", "#a2845e", "#86868b"];
     const shuffledEmojis = emojis.sort(() => 0.5 - Math.random());
@@ -302,7 +304,7 @@ async function cargarPantallaUnirse(id) {
                 const btn = document.createElement('button'); 
                 btn.innerText = `${getAvatar(nombre)} ${nombre}`; 
                 btn.className = 'btn-name';
-                btn.style.borderColor = getColor(nombre); // Para que se vea su color en la lista
+                btn.style.borderColor = getColor(nombre); 
                 btn.onclick = () => unirseYGuardar(nombre, id, datosPiso.nombre_piso); 
                 listaNombres.appendChild(btn);
             });
@@ -414,13 +416,11 @@ document.getElementById('btnCambiarColor').addEventListener('click', async () =>
         { id: "10", hex: "#86868b", nombre: "⚪ Gris" }
     ];
 
-    // Obtenemos los colores que están usando TODOS EXCEPTO el usuario actual
     const coloresEnUso = participantesGrupo
         .filter(p => p !== nombreUsuario)
         .map(p => window.coloresGrupo[p])
         .filter(c => c);
 
-    // Filtramos para dejar solo los colores libres
     const coloresDisponibles = todosLosColores.filter(c => !coloresEnUso.includes(c.hex));
 
     if (coloresDisponibles.length === 0) {
@@ -490,13 +490,16 @@ document.getElementById('tabCompra').addEventListener('click', () => activarPest
 document.getElementById('tabLimpieza').addEventListener('click', () => activarPestaña('tabLimpieza', 'vistaLimpieza'));
 document.getElementById('tabRanking').addEventListener('click', () => activarPestaña('tabRanking', 'vistaRanking'));
 
+// NUEVO: Listeners para abrir y cerrar Gráficos
+document.getElementById('btnAbrirGraficos').addEventListener('click', () => { window.scrollTo(0, 0); document.body.style.overflow = 'hidden'; document.getElementById('vistaGraficos').classList.remove('hidden'); actualizarGraficos(); });
+document.getElementById('btnCerrarGraficos').addEventListener('click', () => { document.body.style.overflow = 'auto'; document.getElementById('vistaGraficos').classList.add('hidden'); });
+
 document.getElementById('btnAbrirTablon').addEventListener('click', () => { window.scrollTo(0, 0); document.body.style.overflow = 'hidden'; document.getElementById('vistaTablon').classList.remove('hidden'); });
 document.getElementById('btnCerrarTablon').addEventListener('click', () => { document.body.style.overflow = 'auto'; document.getElementById('vistaTablon').classList.add('hidden'); });
 
 document.getElementById('btnAbrirHistorial').addEventListener('click', () => { window.scrollTo(0, 0); document.body.style.overflow = 'hidden'; document.getElementById('vistaHistorial').classList.remove('hidden'); });
 document.getElementById('btnCerrarHistorial').addEventListener('click', () => { document.body.style.overflow = 'auto'; document.getElementById('vistaHistorial').classList.add('hidden'); });
 
-// NUEVO: Lógica de borrado en lote para el historial
 document.getElementById('btnVaciarHistorial').addEventListener('click', async () => {
     const seguro = await window.mostrarConfirmacion("Vaciar Historial", "¿Seguro que quieres borrar todo el registro de actividad? Esto no se puede deshacer.");
     if (seguro) {
@@ -554,10 +557,65 @@ function cargarHistorial() {
     });
 }
 
+// --- MÓDULO GRÁFICOS ---
+function actualizarGraficos() {
+    let misData = [0, 0, 0]; // 0: Piso, 1: Facturas, 2: Ocio
+    let pisoData = [0, 0, 0];
+    let totalMio = 0;
+    let totalPiso = 0;
+    
+    ultimosGastos.forEach(g => {
+        let cat = g.categoria || "🏠 Piso";
+        let idx = cat.includes("Facturas") ? 1 : (cat.includes("Ocio") ? 2 : 0);
+        
+        pisoData[idx] += g.importe;
+        totalPiso += g.importe;
+        
+        let miParte = g.involucrados.find(i => (typeof i === 'string' ? i === nombreUsuario : i.nombre === nombreUsuario));
+        if (miParte) {
+            let qty = typeof miParte === 'string' ? (g.importe / g.involucrados.length) : miParte.importe;
+            misData[idx] += qty;
+            totalMio += qty;
+        }
+    });
+    
+    document.getElementById('totalMisGastos').innerText = `Total: ${totalMio.toFixed(2)}€`;
+    document.getElementById('totalPisoGastos').innerText = `Total: ${totalPiso.toFixed(2)}€`;
+    
+    const ctxMis = document.getElementById('chartMisGastos');
+    const ctxPiso = document.getElementById('chartPisoGastos');
+    
+    if(chartMisGastosObj) chartMisGastosObj.destroy();
+    if(chartPisoGastosObj) chartPisoGastosObj.destroy();
+    
+    const configParams = (data) => ({
+        type: 'doughnut',
+        data: {
+            labels: ['🏠 Piso', '💡 Facturas', '🍻 Ocio'],
+            datasets: [{
+                data: data,
+                backgroundColor: ['#32d74b', '#ff9f0a', '#0a84ff'],
+                borderWidth: 0,
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            plugins: {
+                legend: { labels: { color: '#f5f5f7' }, position: 'bottom' }
+            }
+        }
+    });
+    
+    if (ctxMis && window.Chart) chartMisGastosObj = new Chart(ctxMis, configParams(misData));
+    if (ctxPiso && window.Chart) chartPisoGastosObj = new Chart(ctxPiso, configParams(pisoData));
+}
+
 // --- MÓDULO GASTOS ---
 function resetFormGasto() {
     idGastoEditando = null; document.getElementById('tituloFormGasto').innerText = 'Nuevo Gasto';
     document.getElementById('conceptoGasto').value = ''; document.getElementById('importeGasto').value = '';
+    // NUEVO: Resetear la categoría al por defecto
+    document.getElementById('categoriaGasto').value = '🏠 Piso';
     document.getElementById('btnGuardarGasto').innerText = 'Guardar'; document.getElementById('btnEliminarGasto').classList.add('hidden');
     document.getElementById('tipoDivisionGasto').value = 'iguales'; 
     window.articulosPendientesDeBorrar = []; 
@@ -627,6 +685,10 @@ function calcularFaltanteManual() {
 window.abrirEditarGasto = function(gastoObj) {
     idGastoEditando = gastoObj.id; document.getElementById('tituloFormGasto').innerText = 'Editar Gasto';
     document.getElementById('conceptoGasto').value = gastoObj.concepto; document.getElementById('importeGasto').value = gastoObj.importe;
+    
+    // NUEVO: Cargar categoría al editar (si existe, si no '🏠 Piso')
+    document.getElementById('categoriaGasto').value = gastoObj.categoria || '🏠 Piso';
+    
     if (gastoObj.involucrados.length > 0 && typeof gastoObj.involucrados[0] === 'object') { document.getElementById('tipoDivisionGasto').value = 'manual'; } else { document.getElementById('tipoDivisionGasto').value = 'iguales'; }
     prepararFormularioGastos(gastoObj);
     document.getElementById('btnGuardarGasto').innerText = 'Actualizar'; document.getElementById('btnEliminarGasto').classList.remove('hidden');
@@ -649,6 +711,7 @@ document.getElementById('btnEliminarGasto').addEventListener('click', async () =
 document.getElementById('btnGuardarGasto').addEventListener('click', async () => {
     const concepto = document.getElementById('conceptoGasto').value; const importe = parseFloat(document.getElementById('importeGasto').value);
     const pagador = document.getElementById('pagadorGasto').value; const tipo = document.getElementById('tipoDivisionGasto').value;
+    const categoria = document.getElementById('categoriaGasto').value; // NUEVO: Capturar categoría
     
     if (!concepto || isNaN(importe)) return await window.mostrarAlerta("Datos incompletos", "Rellena el concepto y el importe.");
     
@@ -674,7 +737,7 @@ document.getElementById('btnGuardarGasto').addEventListener('click', async () =>
     }
     
     const boton = document.getElementById('btnGuardarGasto'); boton.innerText = "Guardando..."; boton.disabled = true;
-    const datosGasto = { concepto: concepto, importe: importe, pagador: pagador, involucrados: involucradosData };
+    const datosGasto = { concepto: concepto, importe: importe, pagador: pagador, involucrados: involucradosData, categoria: categoria }; // Añadida categoría
     try {
         if (idGastoEditando) {
             await updateDoc(doc(db, "grupos", idPisoActual, "gastos", idGastoEditando), datosGasto);
@@ -684,7 +747,6 @@ document.getElementById('btnGuardarGasto').addEventListener('click', async () =>
             await addDoc(collection(db, "grupos", idPisoActual, "gastos"), datosGasto); 
             registrarActividad(`**${nombreUsuario}** añadió un gasto de ${importe}€ (${concepto}).`, "💸");
             
-            // NUEVO: Borrado en lote (Batch) de la lista de la compra
             if (window.articulosPendientesDeBorrar && window.articulosPendientesDeBorrar.length > 0) {
                 const batch = writeBatch(db);
                 for (let idArticulo of window.articulosPendientesDeBorrar) {
@@ -711,17 +773,24 @@ function cargarListaGastos() {
             listaHtml.innerHTML = '<p style="color:#86868b;">No hay gastos.</p>';
             document.getElementById('listaBalances').innerHTML = '<p style="color:#86868b;">Sin actividad</p>';
             document.getElementById('listaDeudas').innerHTML = ''; 
-            generarRankingGlobal(); return;
+            generarRankingGlobal(); 
+            if(document.getElementById('vistaGraficos').classList.contains('hidden') === false) actualizarGraficos();
+            return;
         }
         listaHtml.innerHTML = '';
         querySnapshot.forEach((docSnap) => {
             const gasto = docSnap.data(); gasto.id = docSnap.id; ultimosGastos.push(gasto); 
             const divGasto = document.createElement('div'); divGasto.className = 'item-lista';
             const extraDetalle = typeof gasto.involucrados[0] === 'object' ? ' (Manual)' : '';
-            divGasto.innerHTML = `<div class="item-info"><span class="item-titulo">${gasto.concepto}</span><span class="item-detalle"><span style="color:${getColor(gasto.pagador)}; font-weight: bold;">${getAvatar(gasto.pagador)} ${gasto.pagador}</span> pagó para ${gasto.involucrados.length}${extraDetalle} • ${new Date(gasto.fecha).toLocaleDateString()}</span></div><div style="display: flex; align-items: center; gap: 12px;"><span class="gasto-importe">${gasto.importe.toFixed(2)}€</span><button type="button" style="background:none; border:none; padding:0; cursor:pointer; font-size:1.4em;" onclick='window.abrirEditarGasto(${JSON.stringify(gasto).replace(/'/g, "\\'")})'>✏️</button></div>`;
+            
+            // Extraer el icono de la categoría (Ej: "🏠" de "🏠 Piso")
+            const iconoCat = gasto.categoria ? gasto.categoria.split(' ')[0] : '🏠';
+            
+            divGasto.innerHTML = `<div class="item-info"><span class="item-titulo"><span style="font-size:0.8em; margin-right:4px; padding: 2px 6px; border-radius:6px; background:#3a3a3c;">${iconoCat}</span>${gasto.concepto}</span><span class="item-detalle"><span style="color:${getColor(gasto.pagador)}; font-weight: bold;">${getAvatar(gasto.pagador)} ${gasto.pagador}</span> pagó para ${gasto.involucrados.length}${extraDetalle} • ${new Date(gasto.fecha).toLocaleDateString()}</span></div><div style="display: flex; align-items: center; gap: 12px;"><span class="gasto-importe">${gasto.importe.toFixed(2)}€</span><button type="button" style="background:none; border:none; padding:0; cursor:pointer; font-size:1.4em;" onclick='window.abrirEditarGasto(${JSON.stringify(gasto).replace(/'/g, "\\'")})'>✏️</button></div>`;
             listaHtml.appendChild(divGasto);
         });
         calcularBalancesYDeudas(ultimosGastos);
+        if(document.getElementById('vistaGraficos').classList.contains('hidden') === false) actualizarGraficos();
     });
 }
 
