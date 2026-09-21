@@ -291,7 +291,7 @@ async function cargarPantallaUnirse(id) {
                 const btn = document.createElement('button'); 
                 btn.innerText = `${getAvatar(nombre)} ${nombre}`; 
                 btn.className = 'btn-name';
-                btn.style.borderColor = getColor(nombre); // Para que se vea su color en la lista
+                btn.style.borderColor = getColor(nombre);
                 btn.onclick = () => unirseYGuardar(nombre, id, datosPiso.nombre_piso); 
                 listaNombres.appendChild(btn);
             });
@@ -320,7 +320,7 @@ async function mostrarDashboard(nombre, id) {
         window.coloresGrupo = datos.colores || {};
         
         document.getElementById('tituloDashboard').innerText = datos.nombre_piso;
-        document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombre)} <span style="color: ${getColor(nombre)}">${nombre}</span>`;
+        document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombre)} <span style="color: ${getColor(nombre)}; font-weight: bold;">${nombre}</span>`;
         participantesGrupo = datos.participantes;
         
         cargarTablon(datos.tablon || { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" });
@@ -376,7 +376,7 @@ document.getElementById('btnCambiarAvatar').addEventListener('click', async () =
             registrarActividad(`**${nombreUsuario}** ha cambiado su avatar a ${emojiFinal}.`, "😎");
             
             window.avataresGrupo[nombreUsuario] = emojiFinal;
-            document.getElementById('nombreUsuarioActual').innerHTML = `${emojiFinal} <span style="color: ${getColor(nombreUsuario)}">${nombreUsuario}</span>`;
+            document.getElementById('nombreUsuarioActual').innerHTML = `${emojiFinal} <span style="color: ${getColor(nombreUsuario)}; font-weight: bold;">${nombreUsuario}</span>`;
             
             if(unsubGastos) unsubGastos(); if(unsubCompra) unsubCompra(); if(unsubLimpieza) unsubLimpieza(); if(unsubHistorial) unsubHistorial();
             mostrarDashboard(nombreUsuario, idPisoActual);
@@ -389,15 +389,44 @@ document.getElementById('btnCambiarAvatar').addEventListener('click', async () =
 
 document.getElementById('btnCambiarColor').addEventListener('click', async () => {
     menuPerfil.classList.add('hidden');
-    const msg = "Escribe el número del color que prefieras:\n\n1. 🔴 Rojo\n2. 🟠 Naranja\n3. 🟡 Amarillo\n4. 🟢 Verde\n5. 🩵 Menta\n6. 🔵 Azul\n7. 🟣 Morado\n8. 🩷 Rosa\n9. 🟤 Marrón\n10. ⚪ Gris";
+    
+    const todosLosColores = [
+        { id: "1", hex: "#ff453a", nombre: "🔴 Rojo" },
+        { id: "2", hex: "#ff9f0a", nombre: "🟠 Naranja" },
+        { id: "3", hex: "#ffd60a", nombre: "🟡 Amarillo" },
+        { id: "4", hex: "#32d74b", nombre: "🟢 Verde" },
+        { id: "5", hex: "#66d4cf", nombre: "🩵 Menta" },
+        { id: "6", hex: "#0a84ff", nombre: "🔵 Azul" },
+        { id: "7", hex: "#bf5af2", nombre: "🟣 Morado" },
+        { id: "8", hex: "#ff375f", nombre: "🩷 Rosa" },
+        { id: "9", hex: "#a2845e", nombre: "🟤 Marrón" },
+        { id: "10", hex: "#86868b", nombre: "⚪ Gris" }
+    ];
+
+    // Obtenemos los colores que están usando TODOS EXCEPTO el usuario actual
+    const coloresEnUso = participantesGrupo
+        .filter(p => p !== nombreUsuario)
+        .map(p => window.coloresGrupo[p])
+        .filter(c => c);
+
+    // Filtramos para dejar solo los colores libres
+    const coloresDisponibles = todosLosColores.filter(c => !coloresEnUso.includes(c.hex));
+
+    if (coloresDisponibles.length === 0) {
+        return await window.mostrarAlerta("Sin colores", "Ya no quedan colores libres en este piso. ¡Tendrás que pedirle a un compañero que cambie el suyo!");
+    }
+
+    let msg = "Escribe el número del color que prefieras:\n\n";
+    let mapaOpciones = {};
+    coloresDisponibles.forEach((c, index) => {
+        let numeroOpcion = (index + 1).toString();
+        msg += `${numeroOpcion}. ${c.nombre}\n`;
+        mapaOpciones[numeroOpcion] = c.hex;
+    });
+
     const seleccion = await window.mostrarPrompt("Elegir Color", msg);
     
-    const mapaColores = {
-        "1": "#ff453a", "2": "#ff9f0a", "3": "#ffd60a", "4": "#32d74b", "5": "#66d4cf",
-        "6": "#0a84ff", "7": "#bf5af2", "8": "#ff375f", "9": "#a2845e", "10": "#86868b"
-    };
-    
-    let nuevoColor = mapaColores[seleccion ? seleccion.trim() : ""];
+    let nuevoColor = mapaOpciones[seleccion ? seleccion.trim() : ""];
     if (nuevoColor) {
         try {
             const objUpdate = {};
@@ -405,7 +434,7 @@ document.getElementById('btnCambiarColor').addEventListener('click', async () =>
             await updateDoc(doc(db, "grupos", idPisoActual), objUpdate);
             
             window.coloresGrupo[nombreUsuario] = nuevoColor;
-            document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombreUsuario)} <span style="color: ${nuevoColor}">${nombreUsuario}</span>`;
+            document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombreUsuario)} <span style="color: ${nuevoColor}; font-weight: bold;">${nombreUsuario}</span>`;
             
             if(unsubGastos) unsubGastos(); if(unsubCompra) unsubCompra(); if(unsubLimpieza) unsubLimpieza(); if(unsubHistorial) unsubHistorial();
             mostrarDashboard(nombreUsuario, idPisoActual);
@@ -413,7 +442,7 @@ document.getElementById('btnCambiarColor').addEventListener('click', async () =>
             await window.mostrarAlerta("Error", "No se pudo cambiar el color.");
         }
     } else if (seleccion !== null) {
-        await window.mostrarAlerta("Atención", "Número no válido. Escribe un número del 1 al 10.");
+        await window.mostrarAlerta("Atención", "Número no válido de la lista disponible. Escribe el número exacto.");
     }
 });
 
@@ -471,7 +500,6 @@ function cargarHistorial() {
             const act = doc.data();
             const fechaStr = new Date(act.fecha).toLocaleString([], {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
             
-            // Reemplazamos los asteriscos por el nombre formateado con su color
             let mensajeFormateado = act.mensaje.replace(/\*\*(.*?)\*\*/g, (match, nombreExtraido) => {
                 return `<span style="color: ${getColor(nombreExtraido)}; font-weight: bold;">${nombreExtraido}</span>`;
             });
@@ -648,7 +676,7 @@ function cargarListaGastos() {
             const gasto = docSnap.data(); gasto.id = docSnap.id; ultimosGastos.push(gasto); 
             const divGasto = document.createElement('div'); divGasto.className = 'item-lista';
             const extraDetalle = typeof gasto.involucrados[0] === 'object' ? ' (Manual)' : '';
-            divGasto.innerHTML = `<div class="item-info"><span class="item-titulo">${gasto.concepto}</span><span class="item-detalle"><span style="color:${getColor(gasto.pagador)}">${getAvatar(gasto.pagador)} ${gasto.pagador}</span> pagó para ${gasto.involucrados.length}${extraDetalle} • ${new Date(gasto.fecha).toLocaleDateString()}</span></div><div style="display: flex; align-items: center; gap: 12px;"><span class="gasto-importe">${gasto.importe.toFixed(2)}€</span><button type="button" style="background:none; border:none; padding:0; cursor:pointer; font-size:1.4em;" onclick='window.abrirEditarGasto(${JSON.stringify(gasto).replace(/'/g, "\\'")})'>✏️</button></div>`;
+            divGasto.innerHTML = `<div class="item-info"><span class="item-titulo">${gasto.concepto}</span><span class="item-detalle"><span style="color:${getColor(gasto.pagador)}; font-weight: bold;">${getAvatar(gasto.pagador)} ${gasto.pagador}</span> pagó para ${gasto.involucrados.length}${extraDetalle} • ${new Date(gasto.fecha).toLocaleDateString()}</span></div><div style="display: flex; align-items: center; gap: 12px;"><span class="gasto-importe">${gasto.importe.toFixed(2)}€</span><button type="button" style="background:none; border:none; padding:0; cursor:pointer; font-size:1.4em;" onclick='window.abrirEditarGasto(${JSON.stringify(gasto).replace(/'/g, "\\'")})'>✏️</button></div>`;
             listaHtml.appendChild(divGasto);
         });
         calcularBalancesYDeudas(ultimosGastos);
@@ -668,7 +696,7 @@ function calcularBalancesYDeudas(gastos) {
     let htmlBalances = ''; let deudores = []; let acreedores = [];
     for (let persona in ultimosBalances) {
         let saldo = ultimosBalances[persona]; let colorSaldo = saldo >= -0.01 && saldo <= 0.01 ? '#f5f5f7' : (saldo > 0 ? '#32d74b' : '#ff453a');
-        htmlBalances += `<div class="balance-item"><span style="color: ${getColor(persona)}">${getAvatar(persona)} ${persona}</span><span style="color: ${colorSaldo}; font-weight: bold;">${saldo.toFixed(2)}€</span></div>`;
+        htmlBalances += `<div class="balance-item"><span style="color: ${getColor(persona)}; font-weight: bold;">${getAvatar(persona)} ${persona}</span><span style="color: ${colorSaldo}; font-weight: bold;">${saldo.toFixed(2)}€</span></div>`;
         if (saldo < -0.01) deudores.push({ nombre: persona, cantidad: Math.abs(saldo) });
         if (saldo > 0.01) acreedores.push({ nombre: persona, cantidad: saldo });
     }
@@ -719,7 +747,7 @@ function cargarListaCompra() {
         document.getElementById('btnComprarSeleccionados').disabled = false; listaHtml.innerHTML = '';
         querySnapshot.forEach(docSnap => {
             const item = docSnap.data();
-            listaHtml.innerHTML += `<div class="manual-split-row" style="margin-bottom: 8px;"><label style="flex:1; display:flex; align-items:center; gap:10px; cursor:pointer;"><input type="checkbox" class="cb-articulo" value="${docSnap.id}" data-nombre="${item.articulo}"><span>${item.articulo} <small style="color:#86868b; display:block; font-size:0.8em;">Por <span style="color:${getColor(item.añadidoPor)}">${getAvatar(item.añadidoPor)} ${item.añadidoPor}</span></small></span></label><button type="button" onclick="borrarArticulo('${docSnap.id}', '${item.articulo.replace(/'/g, "\\'")}')" style="background:none; width:auto; margin:0; padding:5px; color:#ff453a; font-size:1.2em;">🗑️</button></div>`;
+            listaHtml.innerHTML += `<div class="manual-split-row" style="margin-bottom: 8px;"><label style="flex:1; display:flex; align-items:center; gap:10px; cursor:pointer;"><input type="checkbox" class="cb-articulo" value="${docSnap.id}" data-nombre="${item.articulo}"><span>${item.articulo} <small style="color:#86868b; display:block; font-size:0.8em;">Por <span style="color:${getColor(item.añadidoPor)}; font-weight: bold;">${getAvatar(item.añadidoPor)} ${item.añadidoPor}</span></small></span></label><button type="button" onclick="borrarArticulo('${docSnap.id}', '${item.articulo.replace(/'/g, "\\'")}')" style="background:none; width:auto; margin:0; padding:5px; color:#ff453a; font-size:1.2em;">🗑️</button></div>`;
         });
     });
 }
@@ -752,7 +780,7 @@ function resetFormZona() {
     document.getElementById('nombreZona').value = ''; document.getElementById('frecuenciaZona').value = '1';
     document.getElementById('btnGuardarZona').innerText = 'Guardar'; document.getElementById('btnEliminarZona').classList.add('hidden');
     const div = document.getElementById('responsablesZona'); div.innerHTML = '';
-    participantesGrupo.forEach(p => div.innerHTML += `<label><input type="checkbox" value="${p}" checked> <span style="color: ${getColor(p)}">${getAvatar(p)} ${p}</span></label>`);
+    participantesGrupo.forEach(p => div.innerHTML += `<label><input type="checkbox" value="${p}" checked> <span style="color: ${getColor(p)}; font-weight: bold;">${getAvatar(p)} ${p}</span></label>`);
 }
 
 document.getElementById('btnMostrarFormZona').addEventListener('click', () => {
@@ -930,7 +958,7 @@ function renderVistaSemanaActual() {
             <div class="item-lista ${esMi && !estaHecha ? 'mi-turno' : ''}">
                 <div class="item-info">
                     <span class="item-titulo">${a.nombre_zona} <span style="font-size:0.75em; color:#86868b; font-weight:normal;">(Cada ${a.freq} sem)</span></span>
-                    <span class="item-detalle">Rotación: ${a.responsables.map(r => `<span style="color:${getColor(r)}">${getAvatar(r)}${r}</span>`).join(' ➔ ')}</span>
+                    <span class="item-detalle">Rotación: ${a.responsables.map(r => `<span style="color:${getColor(r)}; font-weight: bold;">${getAvatar(r)}${r}</span>`).join(' ➔ ')}</span>
                 </div>
                 <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
                     <div style="font-weight: 600; font-size: 1.1em; color: ${esMi ? '#32d74b' : getColor(a.leTocaA)}">${esMi ? '¡Te toca!' : getAvatar(a.leTocaA) + ' ' + a.leTocaA}</div>
@@ -1093,7 +1121,6 @@ function generarRankingGlobal() {
     
     let html = "";
     asignaciones.forEach(a => {
-        // En lugar del color de la "categoría", forzamos que el borde lateral sea tu color personal elegido
         html += `
             <div style="background: rgba(255,255,255,0.03); border-radius: 12px; padding: 15px; margin-bottom: 12px; display: flex; align-items: center; border: 1px solid #2c2c2e; border-left: 4px solid ${getColor(a.nombre)};">
                 <div style="flex: 1; padding-right: 10px;">
