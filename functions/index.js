@@ -6,7 +6,7 @@ const db = admin.firestore();
 
 const WEEK_MS = 604800000; // 7 días en milisegundos
 
-// 1. Robot del Lunes (Se ejecuta todos los lunes a las 09:00 hora española)
+// 1. Robot del Lunes (Avisa de lo que toca esta semana)
 exports.robotLunes = onSchedule({
   schedule: "0 9 * * 1",
   timeZone: "Europe/Madrid"
@@ -14,7 +14,7 @@ exports.robotLunes = onSchedule({
     await procesarNotificaciones(false);
 });
 
-// 2. Robot del Domingo (Se ejecuta todos los domingos a las 20:00 hora española)
+// 2. Robot del Domingo (Avisa a los morosos de limpieza)
 exports.robotDomingo = onSchedule({
   schedule: "0 20 * * 0",
   timeZone: "Europe/Madrid"
@@ -22,7 +22,6 @@ exports.robotDomingo = onSchedule({
     await procesarNotificaciones(true);
 });
 
-// El Motor Matemático del Servidor
 async function procesarNotificaciones(esDomingo) {
     const ahora = Date.now();
     const gruposSnap = await db.collection("grupos").get();
@@ -43,9 +42,8 @@ async function procesarNotificaciones(esDomingo) {
             let zona = zonas[i];
             let freq = zona.frecuencia || 1;
             
-            // Calculamos a quién le toca usando la misma matemática del Frontend
             let sem = Math.floor((ahora - new Date(zona.fecha_base).getTime()) / WEEK_MS);
-            if (sem < 0 || sem % freq !== 0) continue; // No toca limpiar esto esta semana
+            if (sem < 0 || sem % freq !== 0) continue; 
             
             let periodos = Math.floor(sem / freq);
             let idIdeal = (periodos + i) % zona.responsables.length;
@@ -58,36 +56,31 @@ async function procesarNotificaciones(esDomingo) {
             }
             if (!libre) toca = zona.responsables[idIdeal];
             
-            // Verificamos si alguien ya ha pulsado el botón "Confirmar" en los últimos 6 días
             let hechaEstaSemana = false;
             if (zona.semanas_hechas) {
                 const timestamps = Object.keys(zona.semanas_hechas).map(Number);
                 if (timestamps.length > 0) {
                     const maxTs = Math.max(...timestamps);
-                    if ((ahora - maxTs) < 518400000) { // 518400000 ms = 6 días
+                    if ((ahora - maxTs) < 518400000) { 
                         hechaEstaSemana = true;
                     }
                 }
             }
             
-            // Enviar notificaciones
             if (!esDomingo) {
-                // Lunes: Avisar de lo que toca
                 await enviarPush(grupoId, toca, `🧹 Tu turno de limpiar`, `Esta semana te toca limpiar: ${zona.nombre_zona}`);
             } else {
-                // Domingo: Avisar SOLO si no le han dado a confirmar
                 if (!hechaEstaSemana) {
-                    await enviarPush(grupoId, toca, `🚨 Último aviso: ${zona.nombre_zona}`, `Aún no has confirmado tu limpieza. ¡Que no te llamen El Cerdo del Piso! 🐷`);
+                    await enviarPush(grupoId, toca, `🚨 Último aviso: ${zona.nombre_zona}`, `Aún no has confirmado tu limpieza en Roomy. ¡Que no te llamen El Cerdo del Piso! 🐷`);
                 }
             }
         }
     }
 }
 
-// Función que manda el mensaje al móvil del usuario
 async function enviarPush(grupoId, nombreUsuario, titulo, mensaje) {
     const tokenDoc = await db.collection(`grupos/${grupoId}/tokens_push`).doc(nombreUsuario).get();
-    if (!tokenDoc.exists) return; // Si no aceptó notificaciones, lo saltamos
+    if (!tokenDoc.exists) return; 
     
     const token = tokenDoc.data().token;
     if (!token) return;
@@ -100,6 +93,6 @@ async function enviarPush(grupoId, nombreUsuario, titulo, mensaje) {
     try {
         await admin.messaging().send(payload);
     } catch (error) {
-        console.error("Error enviando push a", nombreUsuario);
+        console.error("Error enviando push a", nombreUsuario, error);
     }
 }
