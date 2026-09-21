@@ -827,6 +827,7 @@ function generarRankingGlobal() {
     let porPagado = [...usuarios].sort((a,b) => b.pagado - a.pagado);
     
     let asignaciones = []; let yaAsignados = new Set();
+    
     usuarios.forEach(u => {
         if (u.strikes >= 3) { asignaciones.push({ nombre: u.nombre, titulo: "El Cerdo del Piso", desc: "Acumula " + u.strikes + " tareas sin hacer. Debe ronda.", color: '#ff453a', emoji: "🐷" }); yaAsignados.add(u.nombre); }
         else if (u.strikes == 2 && !yaAsignados.has(u.nombre)) { asignaciones.push({ nombre: u.nombre, titulo: "Peligro Biológico", desc: "Lleva 2 tareas saltadas. Evita la escoba.", color: '#ff9f0a', emoji: "☣️" }); yaAsignados.add(u.nombre); }
@@ -850,9 +851,30 @@ function generarRankingGlobal() {
         { t: "El Sibarita", d: "Se ha gastado su parte en cosas caras.", c: '#bf5af2', e: "🍷" },
         { t: "El Fantasma", d: "Cero actividad. ¿Sigue viviendo aquí?", c: '#86868b', e: "👻" },
         { t: "El Inquilino Estándar", d: "Cumple su función vital sin ruido.", c: '#86868b', e: "🧍" },
-        { t: "El Protegido", d: "Siempre hay alguien que le paga las cosas.", c: '#bf5af2', e: "🧸" },
-        { t: "El Misterioso", d: "Nadie sabe qué hace con su dinero.", c: '#86868b', e: "👤" }
+        { t: "El Protegido", d: "Siempre hay alguien que le paga las cosas.", c: '#ff453a', e: "🧸" },
+        { t: "El Ninja", d: "Entra y sale de casa sin que nadie lo escuche.", c: '#86868b', e: "🥷" },
+        { t: "El Okupa del Salón", d: "El sofá ya tiene la forma de su espalda.", c: '#ff9f0a', e: "🛋️" },
+        { t: "El DJ de Ducha", d: "Conciertos diarios con el bote de champú.", c: '#0a84ff', e: "🎤" },
+        { t: "El Coleccionista", d: "Acumula tazas y vasos de toda la casa en su cuarto.", c: '#ff453a', e: "☕" },
+        { t: "El Sommelier", d: "Experto catador de cervezas de marca blanca.", c: '#ffd60a', e: "🍻" },
+        { t: "El Nómada", d: "Pasa más tiempo fuera que en su propia casa.", c: '#32d74b', e: "🏕️" },
+        { t: "El Búho Nocturno", d: "Su día empieza cuando los demás cenan.", c: '#5e5ce6', e: "🦉" },
+        { t: "El Rey del Delivery", d: "El repartidor de Glovo ya es uno más de la familia.", c: '#ff9f0a', e: "🍔" },
+        { t: "El Termostato", d: "Tiene frío en verano y calor en invierno.", c: '#64d2ff', e: "🌡️" },
+        { t: "El Tetris de Basura", d: "Experto en apilar cosas para no bajar la bolsa.", c: '#ff453a', e: "🗑️" },
+        { t: "El Creador de Mitos", d: "Las leyendas dicen que una vez limpió por gusto.", c: '#bf5af2', e: "🦄" },
+        { t: "El Manitas", d: "Arregla las cosas con cinta americana y fe.", c: '#86868b', e: "🛠️" },
+        { t: "El Ladrón de Cables", d: "Tus cargadores siempre acaban mágicamente en su cuarto.", c: '#ff453a', e: "🔌" },
+        { t: "El Reloj Suizo", d: "Sus horarios de comidas no se alteran ni con un meteorito.", c: '#32d74b', e: "⏱️" },
+        { t: "El Tupperman", d: "Sobrevive exclusivamente de la comida de su madre.", c: '#ff9f0a', e: "🍱" },
+        { t: "El Hacker", d: "El único con el poder y conocimiento para reiniciar el router.", c: '#32d74b', e: "💻" },
+        { t: "El Monje Zen", d: "Inmune al drama y a las discusiones del piso.", c: '#bf5af2', e: "🧘" },
+        { t: "El Chef de Air Fryer", d: "Hace desde torreznos hasta postres en la freidora de aire.", c: '#ff9f0a', e: "🍟" },
+        { t: "El Gamer de Guardia", d: "Su PS5 hace más horas extra que un reloj.", c: '#0a84ff', e: "🎮" },
+        { t: "El Superviviente", d: "Se iría de vivac al monte antes que fregar los platos.", c: '#32d74b', e: "🏕️" }
     ];
+
+    titulosExtra.sort(() => Math.random() - 0.5);
     
     usuarios.forEach(u => {
         if (!yaAsignados.has(u.nombre)) {
