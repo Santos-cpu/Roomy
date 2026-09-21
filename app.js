@@ -48,10 +48,16 @@ let ultimosGastos = [];
 let ultimosBalances = {};
 let ultimosStrikes = {};
 
-// --- SISTEMA DE AVATARES ---
+// --- SISTEMA DE AVATARES Y COLORES ---
 window.avataresGrupo = {};
+window.coloresGrupo = {};
+
 function getAvatar(nombre) {
     return window.avataresGrupo[nombre] || "👤";
+}
+
+function getColor(nombre) {
+    return window.coloresGrupo[nombre] || "#0a84ff"; // Azul por defecto
 }
 
 // --- SISTEMA DE HISTORIAL DE ACTIVIDAD ---
@@ -235,12 +241,17 @@ document.getElementById('btnCrear').addEventListener('click', async () => {
     const idUnico = 'piso-' + Math.random().toString(36).substring(2, 8);
     const tablonInicial = { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" };
     
-    // Generador de avatares aleatorios (solo al crear un piso nuevo)
+    // Generador de avatares y colores aleatorios al crear un piso nuevo
     const emojis = ["🦊", "🐼", "🐵", "🐶", "🐱", "🐯", "🐨", "🐸", "🐷", "🐻", "🐰", "🦁", "🐮", "🐙", "🐢", "👽", "🤖", "👻", "🤡", "💩"];
-    const shuffled = emojis.sort(() => 0.5 - Math.random());
+    const hexColors = ["#ff453a", "#ff9f0a", "#ffd60a", "#32d74b", "#66d4cf", "#0a84ff", "#bf5af2", "#ff375f", "#a2845e", "#86868b"];
+    const shuffledEmojis = emojis.sort(() => 0.5 - Math.random());
+    const shuffledColors = hexColors.sort(() => 0.5 - Math.random());
+    
     let avataresNuevos = {};
+    let coloresNuevos = {};
     nombresNuevos.forEach((n, idx) => {
-        avataresNuevos[n] = shuffled[idx % shuffled.length];
+        avataresNuevos[n] = shuffledEmojis[idx % shuffledEmojis.length];
+        coloresNuevos[n] = shuffledColors[idx % shuffledColors.length];
     });
     
     try {
@@ -250,6 +261,7 @@ document.getElementById('btnCrear').addEventListener('click', async () => {
             creador: nombresNuevos[0], 
             participantes: nombresNuevos, 
             avatares: avataresNuevos,
+            colores: coloresNuevos,
             tablon: tablonInicial, 
             fecha_creacion: new Date().toISOString() 
         });
@@ -273,11 +285,13 @@ async function cargarPantallaUnirse(id) {
             listaNombres.innerHTML = ''; 
             
             window.avataresGrupo = datosPiso.avatares || {};
+            window.coloresGrupo = datosPiso.colores || {};
             
             datosPiso.participantes.forEach(nombre => {
                 const btn = document.createElement('button'); 
                 btn.innerText = `${getAvatar(nombre)} ${nombre}`; 
                 btn.className = 'btn-name';
+                btn.style.borderColor = getColor(nombre); // Para que se vea su color en la lista
                 btn.onclick = () => unirseYGuardar(nombre, id, datosPiso.nombre_piso); 
                 listaNombres.appendChild(btn);
             });
@@ -303,9 +317,10 @@ async function mostrarDashboard(nombre, id) {
     if (docSnap.exists()) {
         const datos = docSnap.data();
         window.avataresGrupo = datos.avatares || {};
+        window.coloresGrupo = datos.colores || {};
         
         document.getElementById('tituloDashboard').innerText = datos.nombre_piso;
-        document.getElementById('nombreUsuarioActual').innerText = `${getAvatar(nombre)} ${nombre}`;
+        document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombre)} <span style="color: ${getColor(nombre)}">${nombre}</span>`;
         participantesGrupo = datos.participantes;
         
         cargarTablon(datos.tablon || { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" });
@@ -361,7 +376,7 @@ document.getElementById('btnCambiarAvatar').addEventListener('click', async () =
             registrarActividad(`**${nombreUsuario}** ha cambiado su avatar a ${emojiFinal}.`, "😎");
             
             window.avataresGrupo[nombreUsuario] = emojiFinal;
-            document.getElementById('nombreUsuarioActual').innerText = `${emojiFinal} ${nombreUsuario}`;
+            document.getElementById('nombreUsuarioActual').innerHTML = `${emojiFinal} <span style="color: ${getColor(nombreUsuario)}">${nombreUsuario}</span>`;
             
             if(unsubGastos) unsubGastos(); if(unsubCompra) unsubCompra(); if(unsubLimpieza) unsubLimpieza(); if(unsubHistorial) unsubHistorial();
             mostrarDashboard(nombreUsuario, idPisoActual);
@@ -369,6 +384,36 @@ document.getElementById('btnCambiarAvatar').addEventListener('click', async () =
         } catch (error) { 
             await window.mostrarAlerta("Error", "No se pudo cambiar el avatar."); 
         }
+    }
+});
+
+document.getElementById('btnCambiarColor').addEventListener('click', async () => {
+    menuPerfil.classList.add('hidden');
+    const msg = "Escribe el número del color que prefieras:\n\n1. 🔴 Rojo\n2. 🟠 Naranja\n3. 🟡 Amarillo\n4. 🟢 Verde\n5. 🩵 Menta\n6. 🔵 Azul\n7. 🟣 Morado\n8. 🩷 Rosa\n9. 🟤 Marrón\n10. ⚪ Gris";
+    const seleccion = await window.mostrarPrompt("Elegir Color", msg);
+    
+    const mapaColores = {
+        "1": "#ff453a", "2": "#ff9f0a", "3": "#ffd60a", "4": "#32d74b", "5": "#66d4cf",
+        "6": "#0a84ff", "7": "#bf5af2", "8": "#ff375f", "9": "#a2845e", "10": "#86868b"
+    };
+    
+    let nuevoColor = mapaColores[seleccion ? seleccion.trim() : ""];
+    if (nuevoColor) {
+        try {
+            const objUpdate = {};
+            objUpdate[`colores.${nombreUsuario}`] = nuevoColor;
+            await updateDoc(doc(db, "grupos", idPisoActual), objUpdate);
+            
+            window.coloresGrupo[nombreUsuario] = nuevoColor;
+            document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombreUsuario)} <span style="color: ${nuevoColor}">${nombreUsuario}</span>`;
+            
+            if(unsubGastos) unsubGastos(); if(unsubCompra) unsubCompra(); if(unsubLimpieza) unsubLimpieza(); if(unsubHistorial) unsubHistorial();
+            mostrarDashboard(nombreUsuario, idPisoActual);
+        } catch (e) {
+            await window.mostrarAlerta("Error", "No se pudo cambiar el color.");
+        }
+    } else if (seleccion !== null) {
+        await window.mostrarAlerta("Atención", "Número no válido. Escribe un número del 1 al 10.");
     }
 });
 
@@ -425,11 +470,17 @@ function cargarHistorial() {
         snap.forEach(doc => {
             const act = doc.data();
             const fechaStr = new Date(act.fecha).toLocaleString([], {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
+            
+            // Reemplazamos los asteriscos por el nombre formateado con su color
+            let mensajeFormateado = act.mensaje.replace(/\*\*(.*?)\*\*/g, (match, nombreExtraido) => {
+                return `<span style="color: ${getColor(nombreExtraido)}; font-weight: bold;">${nombreExtraido}</span>`;
+            });
+            
             lista.innerHTML += `
                 <div class="item-lista">
                     <div style="font-size: 1.8em; margin-right: 15px;">${act.icono}</div>
                     <div class="item-info">
-                        <span class="item-titulo" style="font-size: 0.95em;">${act.mensaje}</span>
+                        <span class="item-titulo" style="font-size: 0.95em;">${mensajeFormateado}</span>
                         <span class="item-detalle">${fechaStr}</span>
                     </div>
                 </div>`;
@@ -483,14 +534,14 @@ function prepararFormularioGastos(gastoObj = null) {
         participantesGrupo.forEach(p => {
             let checked = true;
             if (gastoObj && Array.isArray(gastoObj.involucrados)) checked = typeof gastoObj.involucrados[0] === 'string' ? gastoObj.involucrados.includes(p) : gastoObj.involucrados.some(i => i.nombre === p);
-            divInvolucrados.innerHTML += `<label><input type="checkbox" value="${p}" class="gasto-cb" ${checked ? 'checked' : ''}> ${getAvatar(p)} ${p}</label>`;
+            divInvolucrados.innerHTML += `<label><input type="checkbox" value="${p}" class="gasto-cb" ${checked ? 'checked' : ''}> <span style="color: ${getColor(p)}">${getAvatar(p)} ${p}</span></label>`;
         });
     } else {
         infoManual.classList.remove('hidden');
         participantesGrupo.forEach(p => {
             let val = '';
             if (gastoObj && Array.isArray(gastoObj.involucrados) && typeof gastoObj.involucrados[0] === 'object') { const found = gastoObj.involucrados.find(i => i.nombre === p); if (found) val = found.importe; }
-            divInvolucrados.innerHTML += `<div class="manual-split-row"><span>${getAvatar(p)} ${p}</span><input type="number" class="manual-importe" data-nombre="${p}" step="0.01" min="0" placeholder="0.00" value="${val}"></div>`;
+            divInvolucrados.innerHTML += `<div class="manual-split-row"><span style="color: ${getColor(p)}">${getAvatar(p)} ${p}</span><input type="number" class="manual-importe" data-nombre="${p}" step="0.01" min="0" placeholder="0.00" value="${val}"></div>`;
         });
         document.querySelectorAll('.manual-importe').forEach(inp => inp.addEventListener('input', calcularFaltanteManual));
         document.getElementById('importeGasto').addEventListener('input', calcularFaltanteManual);
@@ -597,7 +648,7 @@ function cargarListaGastos() {
             const gasto = docSnap.data(); gasto.id = docSnap.id; ultimosGastos.push(gasto); 
             const divGasto = document.createElement('div'); divGasto.className = 'item-lista';
             const extraDetalle = typeof gasto.involucrados[0] === 'object' ? ' (Manual)' : '';
-            divGasto.innerHTML = `<div class="item-info"><span class="item-titulo">${gasto.concepto}</span><span class="item-detalle">${getAvatar(gasto.pagador)} ${gasto.pagador} pagó para ${gasto.involucrados.length}${extraDetalle} • ${new Date(gasto.fecha).toLocaleDateString()}</span></div><div style="display: flex; align-items: center; gap: 12px;"><span class="gasto-importe">${gasto.importe.toFixed(2)}€</span><button type="button" style="background:none; border:none; padding:0; cursor:pointer; font-size:1.4em;" onclick='window.abrirEditarGasto(${JSON.stringify(gasto).replace(/'/g, "\\'")})'>✏️</button></div>`;
+            divGasto.innerHTML = `<div class="item-info"><span class="item-titulo">${gasto.concepto}</span><span class="item-detalle"><span style="color:${getColor(gasto.pagador)}">${getAvatar(gasto.pagador)} ${gasto.pagador}</span> pagó para ${gasto.involucrados.length}${extraDetalle} • ${new Date(gasto.fecha).toLocaleDateString()}</span></div><div style="display: flex; align-items: center; gap: 12px;"><span class="gasto-importe">${gasto.importe.toFixed(2)}€</span><button type="button" style="background:none; border:none; padding:0; cursor:pointer; font-size:1.4em;" onclick='window.abrirEditarGasto(${JSON.stringify(gasto).replace(/'/g, "\\'")})'>✏️</button></div>`;
             listaHtml.appendChild(divGasto);
         });
         calcularBalancesYDeudas(ultimosGastos);
@@ -616,8 +667,8 @@ function calcularBalancesYDeudas(gastos) {
     
     let htmlBalances = ''; let deudores = []; let acreedores = [];
     for (let persona in ultimosBalances) {
-        let saldo = ultimosBalances[persona]; let color = saldo >= -0.01 && saldo <= 0.01 ? '#f5f5f7' : (saldo > 0 ? '#32d74b' : '#ff453a');
-        htmlBalances += `<div class="balance-item"><span>${getAvatar(persona)} ${persona}</span><span style="color: ${color}; font-weight: bold;">${saldo.toFixed(2)}€</span></div>`;
+        let saldo = ultimosBalances[persona]; let colorSaldo = saldo >= -0.01 && saldo <= 0.01 ? '#f5f5f7' : (saldo > 0 ? '#32d74b' : '#ff453a');
+        htmlBalances += `<div class="balance-item"><span style="color: ${getColor(persona)}">${getAvatar(persona)} ${persona}</span><span style="color: ${colorSaldo}; font-weight: bold;">${saldo.toFixed(2)}€</span></div>`;
         if (saldo < -0.01) deudores.push({ nombre: persona, cantidad: Math.abs(saldo) });
         if (saldo > 0.01) acreedores.push({ nombre: persona, cantidad: saldo });
     }
@@ -629,7 +680,7 @@ function calcularBalancesYDeudas(gastos) {
     else {
         while (i < deudores.length && j < acreedores.length) {
             let deudor = deudores[i]; let acreedor = acreedores[j]; let transfer = Math.min(deudor.cantidad, acreedor.cantidad);
-            htmlDeudas += `<div class="deuda-item"><span>💸 <b style="color:#f5f5f7;">${getAvatar(deudor.nombre)} ${deudor.nombre}</b> debe a <b style="color:#f5f5f7;">${getAvatar(acreedor.nombre)} ${acreedor.nombre}</b>: <br><b style="color:#0a84ff; font-size:1.1em;">${transfer.toFixed(2)}€</b></span><button class="btn-bizum" onclick="registrarBizum('${deudor.nombre}', '${acreedor.nombre}', ${transfer})">Bizum hecho</button></div>`;
+            htmlDeudas += `<div class="deuda-item"><span>💸 <b style="color:${getColor(deudor.nombre)};">${getAvatar(deudor.nombre)} ${deudor.nombre}</b> debe a <b style="color:${getColor(acreedor.nombre)};">${getAvatar(acreedor.nombre)} ${acreedor.nombre}</b>: <br><b style="color:#0a84ff; font-size:1.1em;">${transfer.toFixed(2)}€</b></span><button class="btn-bizum" onclick="registrarBizum('${deudor.nombre}', '${acreedor.nombre}', ${transfer})">Bizum hecho</button></div>`;
             deudor.cantidad -= transfer; acreedor.cantidad -= transfer;
             if (deudor.cantidad < 0.01) i++; if (acreedor.cantidad < 0.01) j++;
         }
@@ -668,7 +719,7 @@ function cargarListaCompra() {
         document.getElementById('btnComprarSeleccionados').disabled = false; listaHtml.innerHTML = '';
         querySnapshot.forEach(docSnap => {
             const item = docSnap.data();
-            listaHtml.innerHTML += `<div class="manual-split-row" style="margin-bottom: 8px;"><label style="flex:1; display:flex; align-items:center; gap:10px; cursor:pointer;"><input type="checkbox" class="cb-articulo" value="${docSnap.id}" data-nombre="${item.articulo}"><span>${item.articulo} <small style="color:#86868b; display:block; font-size:0.8em;">Por ${getAvatar(item.añadidoPor)} ${item.añadidoPor}</small></span></label><button type="button" onclick="borrarArticulo('${docSnap.id}', '${item.articulo.replace(/'/g, "\\'")}')" style="background:none; width:auto; margin:0; padding:5px; color:#ff453a; font-size:1.2em;">🗑️</button></div>`;
+            listaHtml.innerHTML += `<div class="manual-split-row" style="margin-bottom: 8px;"><label style="flex:1; display:flex; align-items:center; gap:10px; cursor:pointer;"><input type="checkbox" class="cb-articulo" value="${docSnap.id}" data-nombre="${item.articulo}"><span>${item.articulo} <small style="color:#86868b; display:block; font-size:0.8em;">Por <span style="color:${getColor(item.añadidoPor)}">${getAvatar(item.añadidoPor)} ${item.añadidoPor}</span></small></span></label><button type="button" onclick="borrarArticulo('${docSnap.id}', '${item.articulo.replace(/'/g, "\\'")}')" style="background:none; width:auto; margin:0; padding:5px; color:#ff453a; font-size:1.2em;">🗑️</button></div>`;
         });
     });
 }
@@ -701,7 +752,7 @@ function resetFormZona() {
     document.getElementById('nombreZona').value = ''; document.getElementById('frecuenciaZona').value = '1';
     document.getElementById('btnGuardarZona').innerText = 'Guardar'; document.getElementById('btnEliminarZona').classList.add('hidden');
     const div = document.getElementById('responsablesZona'); div.innerHTML = '';
-    participantesGrupo.forEach(p => div.innerHTML += `<label><input type="checkbox" value="${p}" checked> ${getAvatar(p)} ${p}</label>`);
+    participantesGrupo.forEach(p => div.innerHTML += `<label><input type="checkbox" value="${p}" checked> <span style="color: ${getColor(p)}">${getAvatar(p)} ${p}</span></label>`);
 }
 
 document.getElementById('btnMostrarFormZona').addEventListener('click', () => {
@@ -879,10 +930,10 @@ function renderVistaSemanaActual() {
             <div class="item-lista ${esMi && !estaHecha ? 'mi-turno' : ''}">
                 <div class="item-info">
                     <span class="item-titulo">${a.nombre_zona} <span style="font-size:0.75em; color:#86868b; font-weight:normal;">(Cada ${a.freq} sem)</span></span>
-                    <span class="item-detalle">Rotación: ${a.responsables.map(r => getAvatar(r) + " " + r).join(' ➔ ')}</span>
+                    <span class="item-detalle">Rotación: ${a.responsables.map(r => `<span style="color:${getColor(r)}">${getAvatar(r)}${r}</span>`).join(' ➔ ')}</span>
                 </div>
                 <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
-                    <div style="font-weight: 600; font-size: 1.1em; color: ${esMi ? '#32d74b' : '#f5f5f7'}">${esMi ? '¡Te toca!' : getAvatar(a.leTocaA) + ' ' + a.leTocaA}</div>
+                    <div style="font-weight: 600; font-size: 1.1em; color: ${esMi ? '#32d74b' : getColor(a.leTocaA)}">${esMi ? '¡Te toca!' : getAvatar(a.leTocaA) + ' ' + a.leTocaA}</div>
                     <div style="display:flex; align-items:center; gap: 10px;">
                         ${botonHTML}
                         <button type="button" style="background:none; border:none; padding:0; cursor:pointer; font-size:1.4em;" onclick='window.abrirEditarZona("${a.idZona}")'>✏️</button>
@@ -914,7 +965,7 @@ function renderCalendarioMensual() {
             let hechas = a.zonaRef.semanas_hechas || {}; 
             let conf = hechas[l.getTime()]; 
             let check = conf ? (String(conf).includes('_Tarde') ? '☑️ ' : '✅ ') : '';
-            html += `<div style="display:flex; justify-content:space-between; margin-bottom:8px; ${esM && !conf ? 'background: rgba(50, 215, 75, 0.15); padding: 6px 10px; border-radius: 8px; border-left: 3px solid #32d74b;' : 'padding: 6px 10px;'}"><span style="font-weight:600;">${a.nombre_zona}</span><span style="color:${esM && !conf ? '#32d74b' : '#86868b'}; font-weight:${esM ? 'bold' : 'normal'};">${check}${esM ? '¡Te toca!' : getAvatar(a.leTocaA) + ' ' + a.leTocaA}</span></div>`;
+            html += `<div style="display:flex; justify-content:space-between; margin-bottom:8px; ${esM && !conf ? 'background: rgba(50, 215, 75, 0.15); padding: 6px 10px; border-radius: 8px; border-left: 3px solid #32d74b;' : 'padding: 6px 10px;'}"><span style="font-weight:600;">${a.nombre_zona}</span><span style="color:${esM && !conf ? '#32d74b' : getColor(a.leTocaA)}; font-weight:${esM ? 'bold' : 'normal'};">${check}${esM ? '¡Te toca!' : getAvatar(a.leTocaA) + ' ' + a.leTocaA}</span></div>`;
         });
         cont.innerHTML += html + `</div>`;
     });
@@ -1042,11 +1093,12 @@ function generarRankingGlobal() {
     
     let html = "";
     asignaciones.forEach(a => {
+        // En lugar del color de la "categoría", forzamos que el borde lateral sea tu color personal elegido
         html += `
-            <div style="background: rgba(255,255,255,0.03); border-radius: 12px; padding: 15px; margin-bottom: 12px; display: flex; align-items: center; border: 1px solid #2c2c2e; border-left: 4px solid ${a.color};">
+            <div style="background: rgba(255,255,255,0.03); border-radius: 12px; padding: 15px; margin-bottom: 12px; display: flex; align-items: center; border: 1px solid #2c2c2e; border-left: 4px solid ${getColor(a.nombre)};">
                 <div style="flex: 1; padding-right: 10px;">
                     <div style="font-size: 0.85em; color: ${a.color}; font-weight: 700; text-transform: uppercase;">${a.titulo}</div>
-                    <div style="font-size: 1.25em; font-weight: bold; color: #f5f5f7; margin: 2px 0;">${getAvatar(a.nombre)} ${a.nombre}</div>
+                    <div style="font-size: 1.25em; font-weight: bold; color: #f5f5f7; margin: 2px 0;"><span style="color:${getColor(a.nombre)}">${getAvatar(a.nombre)}</span> ${a.nombre}</div>
                     <div style="font-size: 0.8em; color: #86868b; line-height: 1.3;">${a.desc}</div>
                 </div>
                 <div style="font-size: 2.8em; margin-left: auto; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));">${a.emoji}</div>
