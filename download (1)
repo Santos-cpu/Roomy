@@ -1,0 +1,12 @@
+# Dependencias de Node
+node_modules/
+functions/node_modules/
+
+# Archivos de depuración y logs de Firebase
+firebase-debug.log
+firebase-debug.*.log
+.firebase/
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db

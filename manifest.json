@@ -1,10 +1,11 @@
 {
-  "name": "Roomy",
+  "name": "Gestión Piso Estudiantes",
   "short_name": "Roomy",
+  "description": "App para gestionar gastos y limpieza en pisos compartidos",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#000000",
+  "background_color": "#f4f4f9",
+  "theme_color": "#007bff",
   "icons": [
     {
       "src": "icon-192.png",
