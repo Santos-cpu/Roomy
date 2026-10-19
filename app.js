@@ -133,7 +133,6 @@ function comprobarYMostrarNovedades(idPiso) {
     const storageKey = `roomy_patch_${PATCH_VERSION}_${idPiso}`;
     if (localStorage.getItem(storageKey)) return;
 
-    // Evitar crear dos veces el overlay si ya está en pantalla
     if (document.getElementById('patchNotesOverlay')) return;
 
     const overlay = document.createElement('div');
@@ -160,7 +159,7 @@ function comprobarYMostrarNovedades(idPiso) {
 
                 <div style="background: #090a10; border: 1px solid #262b44; border-left: 3px solid var(--border-highlight); padding: 10px; border-radius: 4px;">
                     <div style="font-weight: 700; color: var(--border-highlight); margin-bottom: 3px;">📊 Categorías, Plantillas y Stats</div>
-                    <div style="color: var(--text-muted); font-size: 0.92em;">Botones rápidos de 1 clic (<i>Wi-Fi, Súper, Cerves</i>), filtro por meses, botón de <b>Liquidar</b> cuentas a 0€ y gráficos en <b>📊</b>.</div>
+                    <div style="color: var(--text-muted); font-size: 0.92em;">Botones rápidos de 1 clic (<i>Wi-Fi, Súper, Cerves</i>), filtro por meses, tocar cualquier gasto para editarlo y gráficos en <b>📊</b>.</div>
                 </div>
 
                 <div style="background: #090a10; border: 1px solid #262b44; border-left: 3px solid var(--arcade-red); padding: 10px; border-radius: 4px;">
@@ -187,7 +186,6 @@ function comprobarYMostrarNovedades(idPiso) {
         localStorage.setItem(storageKey, 'true');
         overlay.remove();
 
-        // Si aún no se ha guardado el resumen de la actualización en el historial del piso, lo registramos una única vez
         if (!parcheLogRegistradoEnGrupo) {
             parcheLogRegistradoEnGrupo = true;
             try {
@@ -504,7 +502,6 @@ async function mostrarDashboard(nombre, id) {
             document.getElementById('tituloDashboard').innerText = datos.nombre_piso;
             document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombre)} <span style="color: ${getColor(nombre)}; font-weight: bold;">${nombre}</span>`;
             
-            // Mostrar u ocultar acceso al Panel Maestro según si es Diego/Creador
             const btnMaster = document.getElementById('btnAbrirMaster');
             if (btnMaster) {
                 if (esUsuarioMaster()) btnMaster.classList.remove('hidden');
@@ -514,7 +511,6 @@ async function mostrarDashboard(nombre, id) {
             cargarTablon(datos.tablon || { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" });
             recalcularStrikesTotales();
 
-            // Mostrar ventana emergente de novedades (1 única vez por dispositivo)
             comprobarYMostrarNovedades(id);
         }
     });
@@ -580,7 +576,6 @@ window.modificarFaltaManual = async function(persona, delta) {
     const actualAjuste = window.ajustesFaltasGrupo[persona] || 0;
     const autoBase = strikesAutomaticos[persona] || 0;
     
-    // Evitar que el total baje de 0
     if (autoBase + actualAjuste + delta < 0) return;
 
     const nuevoAjuste = actualAjuste + delta;
@@ -835,7 +830,7 @@ function cargarHistorial() {
                 <div class="item-lista">
                     <div style="font-size: 1.5em; margin-right: 12px;">${act.icono}</div>
                     <div class="item-info">
-                        <span class="item-titulo" style="font-size: 0.95em; display:block;">${mensajeFormateado}</span>
+                        <span class="item-titulo" style="font-size: 0.95em; display:block; white-space:normal;">${mensajeFormateado}</span>
                         <span class="item-detalle">${fechaStr}</span>
                     </div>
                 </div>`;
@@ -909,13 +904,27 @@ function actualizarGraficos() {
     if (ctxPiso && window.Chart) chartPisoGastosObj = new Chart(ctxPiso, configParams(pisoData));
 }
 
-// --- MÓDULO GASTOS + PLANTILLAS + FILTRO MENSUAL ---
+// --- MÓDULO GASTOS (MODO ENFOQUE + HISTORIAL LIMPIO) ---
 window.usarPlantillaGasto = function(concepto, categoria) {
     window.playRetroSound('blip');
     document.getElementById('conceptoGasto').value = concepto;
     document.getElementById('categoriaGasto').value = categoria;
     document.getElementById('importeGasto').focus();
 };
+
+function mostrarModoFormularioGasto(mostrar) {
+    if (mostrar) {
+        document.getElementById('formGasto').classList.remove('hidden');
+        document.getElementById('btnMostrarFormGasto').classList.add('hidden');
+        document.getElementById('seccionBalances').classList.add('hidden');
+        document.getElementById('listaGastosContenedor').classList.add('hidden');
+    } else {
+        document.getElementById('formGasto').classList.add('hidden');
+        document.getElementById('btnMostrarFormGasto').classList.remove('hidden');
+        document.getElementById('seccionBalances').classList.remove('hidden');
+        document.getElementById('listaGastosContenedor').classList.remove('hidden');
+    }
+}
 
 function resetFormGasto() {
     idGastoEditando = null; document.getElementById('tituloFormGasto').innerText = 'NUEVO GASTO';
@@ -929,12 +938,13 @@ function resetFormGasto() {
 
 document.getElementById('btnMostrarFormGasto').addEventListener('click', () => {
     window.playRetroSound('blip');
-    resetFormGasto(); document.getElementById('formGasto').classList.remove('hidden'); document.getElementById('btnMostrarFormGasto').classList.add('hidden');
+    resetFormGasto();
+    mostrarModoFormularioGasto(true);
 });
 
 document.getElementById('btnCancelarGasto').addEventListener('click', () => {
     window.playRetroSound('blip');
-    document.getElementById('formGasto').classList.add('hidden'); document.getElementById('btnMostrarFormGasto').classList.remove('hidden');
+    mostrarModoFormularioGasto(false);
     window.articulosPendientesDeBorrar = []; 
 });
 
@@ -989,7 +999,9 @@ function calcularFaltanteManual() {
     else info.innerHTML = `<span style="color:#2ec4b6;">Cuadrado perfecto ✅</span>`;
 }
 
-window.abrirEditarGasto = function(gastoObj) {
+window.abrirEditarGastoPorId = function(idGasto) {
+    const gastoObj = getGastoObjPorId(idGasto);
+    if (!gastoObj) return;
     window.playRetroSound('blip');
     idGastoEditando = gastoObj.id; document.getElementById('tituloFormGasto').innerText = 'EDITAR GASTO';
     document.getElementById('conceptoGasto').value = gastoObj.concepto; document.getElementById('importeGasto').value = gastoObj.importe;
@@ -998,8 +1010,8 @@ window.abrirEditarGasto = function(gastoObj) {
     if (gastoObj.involucrados.length > 0 && typeof gastoObj.involucrados[0] === 'object') { document.getElementById('tipoDivisionGasto').value = 'manual'; } else { document.getElementById('tipoDivisionGasto').value = 'iguales'; }
     prepararFormularioGastos(gastoObj);
     document.getElementById('btnGuardarGasto').innerText = 'ACTUALIZAR'; document.getElementById('btnEliminarGasto').classList.remove('hidden');
-    document.getElementById('formGasto').classList.remove('hidden'); document.getElementById('btnMostrarFormGasto').classList.add('hidden');
-    document.getElementById('formGasto').scrollIntoView({ behavior: 'smooth' });
+    mostrarModoFormularioGasto(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
 document.getElementById('btnEliminarGasto').addEventListener('click', async () => {
@@ -1150,13 +1162,18 @@ function renderListaGastosFiltrada() {
     });
 
     if (gastosFiltrados.length === 0) {
-        listaHtml.innerHTML = '<p style="color:var(--text-muted); text-align:center;">Sin registros en este periodo.</p>';
+        listaHtml.innerHTML = '<p style="color:var(--text-muted); text-align:center; margin: 12px 0;">Sin movimientos registrados.</p>';
         return;
     }
 
     listaHtml.innerHTML = '';
     gastosFiltrados.forEach((gasto) => {
-        const divGasto = document.createElement('div'); divGasto.className = 'item-lista';
+        const divGasto = document.createElement('div');
+        divGasto.className = 'item-lista gasto-row';
+        divGasto.onclick = () => window.abrirEditarGastoPorId(gasto.id);
+
+        const d = new Date(gasto.fecha);
+        const fechaCorta = !isNaN(d) ? d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }) : '';
         
         if (esGastoBizum(gasto)) {
             let receptor = gasto.receptor || '';
@@ -1165,41 +1182,33 @@ function renderListaGastosFiltrada() {
             }
             
             divGasto.innerHTML = `
+                <div class="gasto-cat-icon" style="border-color: var(--arcade-green);">💸</div>
                 <div class="item-info">
-                    <span class="item-titulo">
-                        <span style="font-size:0.8em; padding: 2px 5px; border-radius:3px; background:#090a10; border:1px solid var(--arcade-green);">💸</span>
-                        Pago por Bizum
-                    </span>
+                    <span class="item-titulo">Pago por Bizum</span>
                     <span class="item-detalle">
-                        <span style="color:${getColor(gasto.pagador)}; font-weight: bold;">${getAvatar(gasto.pagador)} ${gasto.pagador}</span> 
+                        <span style="color:${getColor(gasto.pagador)}; font-weight: 700;">${gasto.pagador}</span> 
                         ➔ 
-                        <span style="color:${getColor(receptor)}; font-weight: bold;">${getAvatar(receptor)} ${receptor}</span> 
-                        • ${new Date(gasto.fecha).toLocaleDateString()}
+                        <span style="color:${getColor(receptor)}; font-weight: 700;">${receptor}</span> 
+                        • ${fechaCorta}
                     </span>
                 </div>
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <span class="gasto-importe" style="color: var(--arcade-green);">${gasto.importe.toFixed(2)}€</span>
-                    <button type="button" style="background:none; border:none; box-shadow:none; width:auto; padding:2px; cursor:pointer; font-size:1.1em; margin:0;" onclick='window.abrirEditarGasto(${JSON.stringify(gasto).replace(/'/g, "\\'")})'>✏️</button>
-                </div>`;
+                <span class="gasto-importe" style="color: var(--arcade-green);">${gasto.importe.toFixed(2)}€</span>`;
         } else {
-            const extraDetalle = typeof gasto.involucrados[0] === 'object' ? ' (Manual)' : '';
+            const esManual = typeof gasto.involucrados[0] === 'object';
+            const esTodos = !esManual && gasto.involucrados.length === participantesGrupo.length;
+            const infoReparto = esManual ? ' · Manual' : (!esTodos ? ` · ${gasto.involucrados.length}p` : '');
             const iconoCat = gasto.categoria ? gasto.categoria.split(' ')[0] : '🏠';
             
             divGasto.innerHTML = `
+                <div class="gasto-cat-icon">${iconoCat}</div>
                 <div class="item-info">
-                    <span class="item-titulo">
-                        <span style="font-size:0.8em; padding: 2px 5px; border-radius:3px; background:#090a10; border:1px solid #394168;">${iconoCat}</span>
-                        ${gasto.concepto}
-                    </span>
+                    <span class="item-titulo">${gasto.concepto}</span>
                     <span class="item-detalle">
-                        <span style="color:${getColor(gasto.pagador)}; font-weight: bold;">${getAvatar(gasto.pagador)} ${gasto.pagador}</span> 
-                        (${gasto.involucrados.length}p${extraDetalle}) • ${new Date(gasto.fecha).toLocaleDateString()}
+                        <span style="color:${getColor(gasto.pagador)}; font-weight: 700;">${getAvatar(gasto.pagador)} ${gasto.pagador}</span> 
+                        • ${fechaCorta}${infoReparto}
                     </span>
                 </div>
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <span class="gasto-importe">${gasto.importe.toFixed(2)}€</span>
-                    <button type="button" style="background:none; border:none; box-shadow:none; width:auto; padding:2px; cursor:pointer; font-size:1.1em; margin:0;" onclick='window.abrirEditarGasto(${JSON.stringify(gasto).replace(/'/g, "\\'")})'>✏️</button>
-                </div>`;
+                <span class="gasto-importe">${gasto.importe.toFixed(2)}€</span>`;
         }
         listaHtml.appendChild(divGasto);
     });
@@ -1214,8 +1223,8 @@ function cargarListaGastos() {
         ultimosGastos = [];
         if (querySnapshot.empty) {
             actualizarOpcionesFiltroMes();
-            listaHtml.innerHTML = '<p style="color:var(--text-muted); text-align:center;">Sin registros de gastos.</p>';
-            document.getElementById('listaBalances').innerHTML = '<p style="color:var(--text-muted); grid-column: span 2; text-align:center;">Sin actividad</p>';
+            listaHtml.innerHTML = '<p style="color:var(--text-muted); text-align:center; margin: 12px 0;">Sin movimientos registrados.</p>';
+            document.getElementById('listaBalances').innerHTML = '<p style="color:var(--text-muted); grid-column: span 2; text-align:center; margin: 6px 0;">Sin actividad</p>';
             document.getElementById('listaDeudas').innerHTML = ''; 
             generarRankingGlobal(); 
             if(document.getElementById('vistaGraficos').classList.contains('hidden') === false) actualizarGraficos();
@@ -1259,16 +1268,16 @@ function calcularBalancesYDeudas(gastos) {
     
     let htmlDeudas = ''; let i = 0; let j = 0;
     if (deudores.length === 0) { 
-        htmlDeudas = '<div style="background: rgba(46, 196, 182, 0.1); border: 1px solid #2ec4b6; border-radius: 4px; padding: 8px; text-align: center; color: #2ec4b6; font-weight: 700; font-size: 0.9em;">✅ CUENTAS SALDADAS</div>'; 
+        htmlDeudas = '<div style="background: rgba(46, 196, 182, 0.1); border: 1px solid #2ec4b6; border-radius: 4px; padding: 7px; text-align: center; color: #2ec4b6; font-weight: 700; font-size: 0.85em;">✅ CUENTAS SALDADAS</div>'; 
     } else {
         while (i < deudores.length && j < acreedores.length) {
             let deudor = deudores[i]; let acreedor = acreedores[j]; let transfer = Math.min(deudor.cantidad, acreedor.cantidad);
             htmlDeudas += `
                 <div class="deuda-item">
-                    <span>
-                        <b style="color:${getColor(deudor.nombre)};">${getAvatar(deudor.nombre)} ${deudor.nombre}</b> ➔ 
-                        <b style="color:${getColor(acreedor.nombre)};">${getAvatar(acreedor.nombre)} ${acreedor.nombre}</b>: 
-                        <b style="color:var(--arcade-yellow); margin-left:4px;">${transfer.toFixed(2)}€</b>
+                    <span style="min-width:0; overflow:hidden; text-overflow:ellipsis;">
+                        <b style="color:${getColor(deudor.nombre)};">${deudor.nombre}</b> ➔ 
+                        <b style="color:${getColor(acreedor.nombre)};">${acreedor.nombre}</b>: 
+                        <b style="color:var(--arcade-yellow); margin-left:3px;">${transfer.toFixed(2)}€</b>
                     </span>
                     <button class="btn-bizum" onclick="registrarBizum('${deudor.nombre}', '${acreedor.nombre}', ${transfer})">BIZUM</button>
                 </div>`;
@@ -1293,7 +1302,6 @@ window.registrarBizum = async function(deudor, acreedor, cantidad) {
             involucrados: [{ nombre: acreedor, importe: parseFloat(cantidad) }],
             fecha: new Date().toISOString()
         });
-        // SONIDO 8-BITS DE MONEDA AL PAGAR BIZUM
         window.playRetroSound('coin_bizum');
         registrarActividad(`**${deudor}** ha saldado una cuenta de ${cantidad.toFixed(2)}€ a **${acreedor}**.`, "🤝");
     } catch(e) { await window.mostrarAlerta("Error", "No se pudo registrar el pago."); }
@@ -1348,9 +1356,8 @@ document.getElementById('btnComprarSeleccionados').addEventListener('click', asy
     window.articulosPendientesDeBorrar = seleccionados.map(cb => cb.value); 
     
     activarPestaña('tabGastos', 'vistaGastos');
-    document.getElementById('formGasto').classList.remove('hidden');
-    document.getElementById('btnMostrarFormGasto').classList.add('hidden');
-    document.getElementById('formGasto').scrollIntoView({ behavior: 'smooth' });
+    mostrarModoFormularioGasto(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
 // --- MÓDULO LIMPIEZA, CALENDARIO & SISTEMA VAR ---
@@ -1426,9 +1433,8 @@ window.marcarLimpieza = async function(idZona, timestamp, esTarde = false, nombr
     try { 
         await updateDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZona), { 
             [`semanas_hechas.${timestamp}`]: valor,
-            [`var_votos.${timestamp}`]: deleteField() // Reinicia votos del VAR si vuelve a marcarse
+            [`var_votos.${timestamp}`]: deleteField()
         }); 
-        // SONIDO 8-BITS AL COMPLETAR TAREA DE LIMPIEZA
         window.playRetroSound('powerup');
         registrarActividad(`**${nombreUsuario}** confirmó la limpieza del ${nombreZona}.`, esTarde ? "⚠️" : "✨");
     } 
@@ -1459,7 +1465,6 @@ window.votarVar = async function(idZona, timestamp, infractor, nombreZona) {
 
     try {
         if (votosActuales.length >= 2) {
-            // 2 compañeros han impugnado: se desmarca la tarea y se suma +1 falta por intento de tongo
             await updateDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZona), {
                 [`semanas_hechas.${timestamp}`]: deleteField(),
                 [`var_votos.${timestamp}`]: deleteField()
@@ -1474,7 +1479,6 @@ window.votarVar = async function(idZona, timestamp, infractor, nombreZona) {
             registrarActividad(`📺 VAR: **${votosActuales[0]}** y **${votosActuales[1]}** anularon "${nombreZona}". ¡+1 Falta a **${infractor}** por intento de tongo!`, "🚩");
             await window.mostrarAlerta("📺 SENTENCIA DEL VAR", `¡Tongo confirmado! "${nombreZona}" vuelve a estar pendiente y ${infractor} recibe +1 falta.`);
         } else {
-            // Primer voto (1/2)
             await updateDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZona), {
                 [`var_votos.${timestamp}`]: votosActuales
             });
@@ -1552,7 +1556,6 @@ function recalcularStrikesTotales() {
         }
     }
 
-    // Sumamos los ajustes manuales y sanciones del VAR
     participantesGrupo.forEach(p => {
         const ajuste = window.ajustesFaltasGrupo[p] || 0;
         ultimosStrikes[p] = Math.max(0, (strikesAutomaticos[p] || 0) + ajuste);
