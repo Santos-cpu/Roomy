@@ -317,7 +317,7 @@
             width: 34px;
             height: 34px;
             background: #090a10;
-            border: 1px solid var(--border-color);
+            border: 2px solid var(--border-color);
             border-radius: 4px;
             display: flex;
             align-items: center;
@@ -795,7 +795,10 @@
                     
                     <div id="listaGastos">Cargando...</div>
 
-                    <button type="button" id="btnArchivarGastos" class="btn-secundario" style="margin-top: 14px; margin-bottom: 0; padding: 9px; font-size: 8.5px; color: var(--text-muted);">🧹 LIQUIDAR HISTORIAL (CUENTAS A 0€)</button>
+                    <!-- Botón de paginación (Ver todos / Ver menos) -->
+                    <button type="button" id="btnToggleMasGastos" class="btn-outline hidden" style="margin-top: 10px; margin-bottom: 0; padding: 8px; font-size: 8.5px;"></button>
+
+                    <button type="button" id="btnArchivarGastos" class="btn-secundario" style="margin-top: 12px; margin-bottom: 0; padding: 9px; font-size: 8.5px; color: var(--text-muted);">🧹 LIQUIDAR HISTORIAL (CUENTAS A 0€)</button>
                 </div>
 
             </div>
@@ -1010,9 +1013,9 @@
                         <canvas id="chartMisGastos"></canvas>
                     </div>
                     <div style="display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; margin-top: 14px; font-size: 0.9em;">
-                        <div style="color: #32d74b;">🏠 Piso: <br><span id="misG-piso" style="font-weight:bold; color:#fff;">0.00€</span></div>
+                        <div style="color: #0a84ff;">🏠 Piso: <br><span id="misG-piso" style="font-weight:bold; color:#fff;">0.00€</span></div>
                         <div style="color: #ff9f0a;">💡 Facturas: <br><span id="misG-facturas" style="font-weight:bold; color:#fff;">0.00€</span></div>
-                        <div style="color: #0a84ff;">🍻 Ocio: <br><span id="misG-ocio" style="font-weight:bold; color:#fff;">0.00€</span></div>
+                        <div style="color: #bf5af2;">🍻 Ocio: <br><span id="misG-ocio" style="font-weight:bold; color:#fff;">0.00€</span></div>
                     </div>
                     <p id="totalMisGastos" style="font-family: var(--font-pixel); font-size: 0.85em; color: var(--arcade-yellow); margin-top: 14px; margin-bottom: 4px;"></p>
                 </div>
@@ -1023,9 +1026,9 @@
                         <canvas id="chartPisoGastos"></canvas>
                     </div>
                     <div style="display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; margin-top: 14px; font-size: 0.9em;">
-                        <div style="color: #32d74b;">🏠 Piso: <br><span id="pisoG-piso" style="font-weight:bold; color:#fff;">0.00€</span></div>
+                        <div style="color: #0a84ff;">🏠 Piso: <br><span id="pisoG-piso" style="font-weight:bold; color:#fff;">0.00€</span></div>
                         <div style="color: #ff9f0a;">💡 Facturas: <br><span id="pisoG-facturas" style="font-weight:bold; color:#fff;">0.00€</span></div>
-                        <div style="color: #0a84ff;">🍻 Ocio: <br><span id="pisoG-ocio" style="font-weight:bold; color:#fff;">0.00€</span></div>
+                        <div style="color: #bf5af2;">🍻 Ocio: <br><span id="pisoG-ocio" style="font-weight:bold; color:#fff;">0.00€</span></div>
                     </div>
                     <p id="totalPisoGastos" style="font-family: var(--font-pixel); font-size: 0.85em; color: var(--arcade-yellow); margin-top: 14px; margin-bottom: 4px;"></p>
                 </div>
