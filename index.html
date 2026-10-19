@@ -528,7 +528,7 @@
         .menu-item:last-child { border-bottom: none; }
         .menu-item:active { background: var(--border-color); }
 
-        /* Botones del Panel Maestro */
+        /* Botones del Panel Maestro y Gestión de Inquilinos */
         .btn-master-ctrl {
             width: 38px;
             height: 36px;
@@ -627,22 +627,25 @@
     <!-- PANTALLA: MIS PISOS (SELECT STAGE) -->
     <div id="pantallaMisPisos" class="card hidden">
         <h2 style="text-align: center; margin-bottom: 6px;">🕹️ ROOMY</h2>
-        <p style="text-align: center; color: var(--text-muted); font-size: 0.85em; margin-top: 0; margin-bottom: 20px;">SELECCIONA TU BASE</p>
+        <p style="text-align: center; color: var(--text-muted); font-size: 0.85em; margin-top: 0; margin-bottom: 20px;">SELECCIONA TU PISO</p>
         <div id="listaMisPisos"></div>
-        <button id="btnIrCrearPiso" class="btn-outline" style="margin-top: 10px;">+ NUEVA PARTIDA (PISO)</button>
-        <button id="btnIrUnirsePiso" class="btn-secundario" style="margin-bottom: 0;">🔗 UNIRSE CON CÓDIGO / URL</button>
+        <button id="btnIrCrearPiso" class="btn-outline" style="margin-top: 10px;">+ CREAR UN PISO NUEVO</button>
+        <button id="btnIrUnirsePiso" class="btn-secundario" style="margin-bottom: 0;">🔗 UNIRSE CON ENLACE</button>
     </div>
 
-    <!-- PANTALLA: CREAR PISO -->
+    <!-- PANTALLA: CREAR / EDITAR PISO -->
     <div id="pantallaCrear" class="card hidden">
-        <h2 style="text-align: center; margin-bottom: 18px;">✨ NUEVO PISO</h2>
-        <input type="text" id="nombrePiso" placeholder="Nombre de la base / piso">
+        <h2 id="tituloPantallaCrear" style="text-align: center; margin-bottom: 12px;">✨ NUEVO PISO</h2>
+        <p style="font-size: 0.82em; color: var(--arcade-yellow); margin-top: 0; margin-bottom: 14px; text-align: center; background: rgba(255, 190, 11, 0.1); padding: 8px; border-radius: 4px; border: 1px solid var(--arcade-yellow);">
+            ⚠️ ¡Recuerda añadir <b>tu propio nombre</b> además del de tus compañeros!
+        </p>
+        <input type="text" id="nombrePiso" placeholder="Nombre del piso">
         <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-            <input type="text" id="inputNuevoNombre" placeholder="Añadir jugador (inquilino)" style="margin-bottom: 0;">
+            <input type="text" id="inputNuevoNombre" placeholder="Nombre de inquilino..." style="margin-bottom: 0;">
             <button id="btnAñadirNombre" type="button" style="width: 54px; margin-bottom: 0; font-size: 1.2em;">+</button>
         </div>
         <div id="contenedorNuevosNombres" style="margin-bottom: 18px;"></div>
-        <button id="btnCrear">CREAR PISO</button>
+        <button id="btnCrear">CONTINUAR</button>
         <button id="btnIrUnirsePiso2" class="btn-outline">🔗 UNIRSE CON ENLACE</button>
         <button id="btnCancelarCrear" class="btn-secundario hidden" style="margin-bottom: 0;">VOLVER</button>
     </div>
@@ -650,8 +653,10 @@
     <!-- PANTALLA: ELEGIR JUGADOR -->
     <div id="pantallaUnirse" class="card hidden">
         <h2 id="tituloUnirse" style="text-align: center;">CARGANDO...</h2>
-        <p style="text-align: center; color: var(--arcade-yellow); font-family: var(--font-pixel); font-size: 0.65em; margin: 12px 0 18px 0;">ELIGE A TU JUGADOR:</p>
+        <p style="text-align: center; color: var(--arcade-yellow); font-family: var(--font-pixel); font-size: 0.65em; margin: 12px 0 18px 0;">¿QUIÉN ERES TÚ?</p>
         <div id="listaNombres"></div>
+        <hr>
+        <button id="btnVolverEditarNombres" class="btn-secundario" style="margin-bottom: 0; font-size: 9.5px;">⬅ VOLVER / FALTA MI NOMBRE</button>
     </div>
 
     <!-- PANTALLA PRINCIPAL: DASHBOARD -->
@@ -675,13 +680,13 @@
                         <span id="nombreUsuarioActual"></span>
                         <span style="font-size: 0.7em; color: var(--arcade-yellow);">▼</span>
                     </button>
-                    <div id="menuPerfil" class="hidden" style="position: absolute; top: 100%; right: 0; margin-top: 8px; background: var(--bg-card); border: 2px solid #fff; border-radius: 4px; width: 225px; box-shadow: 6px 6px 0px #000; z-index: 200; overflow: hidden;">
+                    <div id="menuPerfil" class="hidden" style="position: absolute; top: 100%; right: 0; margin-top: 8px; background: var(--bg-card); border: 2px solid #fff; border-radius: 4px; width: 230px; box-shadow: 6px 6px 0px #000; z-index: 200; overflow: hidden;">
                         <div style="background: #090a10; padding: 6px 12px; font-family: var(--font-pixel); font-size: 8px; color: var(--arcade-yellow); border-bottom: 2px solid var(--border-color);">MENÚ DE PAUSA</div>
                         <div id="btnCambiarAvatar" class="menu-item">
-                            <span>😎</span> <span>Cambiar Avatar</span>
+                            <span>😎</span> <span>Cambiar mi Avatar</span>
                         </div>
                         <div id="btnCambiarColor" class="menu-item">
-                            <span>🎨</span> <span>Elegir Color</span>
+                            <span>🎨</span> <span>Cambiar mi Color</span>
                         </div>
                         <div id="btnToggleSonido" class="menu-item">
                             <span id="iconoToggleSonido">🔊</span> <span id="textoToggleSonido">FX / Vibración: ON</span>
@@ -690,6 +695,9 @@
                         <div id="btnAbrirMaster" class="menu-item hidden" style="color: var(--arcade-yellow); background: rgba(255, 190, 11, 0.08);">
                             <span>👑</span> <span>Panel Maestro</span>
                         </div>
+                        <div id="btnGestionarInquilinos" class="menu-item">
+                            <span>👥</span> <span>Editar inquilinos</span>
+                        </div>
                         <div id="btnCopiarEnlace" class="menu-item">
                             <span>🔗</span> <span>Invitar (Copiar URL)</span>
                         </div>
@@ -697,10 +705,10 @@
                             <span>✏️</span> <span>Renombrar Piso</span>
                         </div>
                         <div id="btnCambiarUsuarioMenu" class="menu-item" style="color: var(--arcade-orange);">
-                            <span>🔄</span> <span>Cambiar Jugador</span>
+                            <span>🔄</span> <span>Cambiar quién soy</span>
                         </div>
                         <div id="btnVolverMenu" class="menu-item" style="color: var(--arcade-red);">
-                            <span>🗺️</span> <span>Salir al Mapa</span>
+                            <span>🏠</span> <span>Mis pisos / Salir</span>
                         </div>
                     </div>
                 </div>
@@ -865,6 +873,31 @@
                 <h4>HALL OF FAME 🏆</h4>
                 <p style="font-size: 0.85em; color: var(--text-muted); margin-top: -6px; margin-bottom: 16px;">Nivel, XP y rangos según finanzas y misiones.</p>
                 <div id="contenidoRanking">Calculando ranking...</div>
+            </div>
+        </div>
+
+        <!-- VISTA ESPECIAL: GESTIONAR INQUILINOS -->
+        <div id="vistaInquilinos" class="hidden" style="background: var(--bg-dark); position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; padding: 16px; box-sizing: border-box; overflow-y: auto; padding-bottom: 90px;">
+            <div style="max-width: 420px; margin: 0 auto;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; padding-top: 6px; border-bottom: 2px solid var(--border-color); padding-bottom: 10px;">
+                    <h2 style="margin: 0;">👥 INQUILINOS</h2>
+                    <button type="button" id="btnCerrarInquilinos" class="btn-secundario" style="padding: 8px 12px; width: auto; margin: 0;">CERRAR</button>
+                </div>
+
+                <div class="card">
+                    <h4>AÑADIR COMPAÑERO</h4>
+                    <p style="font-size: 0.82em; color: var(--text-muted); margin-top: -6px; margin-bottom: 12px;">Si alguien nuevo entra al piso o se olvidó ponerse en la lista:</p>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="inputAñadirInquilinoPanel" placeholder="Nombre del compañero..." style="margin-bottom: 0;">
+                        <button type="button" id="btnGuardarNuevoInquilino" style="width: 54px; margin-bottom: 0; font-size: 1.2em;">+</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h4>INTEGRANTES ACTUALES</h4>
+                    <p style="font-size: 0.82em; color: var(--text-muted); margin-top: -6px; margin-bottom: 14px;">Puedes corregir cualquier nombre (conservando sus gastos) o quitar a alguien del piso.</p>
+                    <div id="listaGestionInquilinos" style="display: flex; flex-direction: column; gap: 10px;"></div>
+                </div>
             </div>
         </div>
 
