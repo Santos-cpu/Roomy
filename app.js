@@ -72,9 +72,23 @@ let strikesAutomaticos = {};
 let ultimosStrikes = {};
 let parcheLogRegistradoEnGrupo = false;
 let mostrarTodosGastos = false;
+let rankingDebounceTimer = null;
+let chartJsCargado = false;
 
 let chartMisGastosObj = null;
 let chartPisoGastosObj = null;
+
+// --- CARGA BAJO DEMANDA DE CHART.JS ---
+async function asegurarChartJs() {
+    if (window.Chart || chartJsCargado) return true;
+    return new Promise((resolve) => {
+        const script = document.createElement('script');
+        script.src = "https://cdn.jsdelivr.net/npm/chart.js";
+        script.onload = () => { chartJsCargado = true; resolve(true); };
+        script.onerror = () => resolve(false);
+        document.head.appendChild(script);
+    });
+}
 
 // --- SINTETIZADOR 8-BITS (SOLO TAREAS Y BIZUM) + VIBRACIÓN HÁPTICA ---
 let sonidoActivo = localStorage.getItem('sonido8Bit') !== 'OFF';
@@ -236,31 +250,70 @@ function esUsuarioMaster() {
     return n === 'diego' || nombreUsuario === creadorGrupo;
 }
 
-// --- SISTEMA DE HISTORIAL DE ACTIVIDAD ---
+// --- SISTEMA DE HISTORIAL DE ACTIVIDAD Y BADGE DE NOTIFICACIÓN (0 LECTURAS EXTRA) ---
 async function registrarActividad(mensaje, icono) {
     if (!idPisoActual) return;
+    const ahora = Date.now();
     try {
         await addDoc(collection(db, "grupos", idPisoActual, "historial"), {
             mensaje: mensaje,
             icono: icono,
-            fecha: Date.now()
+            fecha: ahora
         });
+        // Actualizamos la marca en el documento del grupo para encender el punto rojo a los compañeros sin gastar lecturas de historial
+        await updateDoc(doc(db, "grupos", idPisoActual), {
+            ultima_actividad: ahora,
+            ultimo_autor_actividad: nombreUsuario
+        });
+        localStorage.setItem(`visto_hist_${idPisoActual}`, String(ahora));
     } catch (e) { console.error("Error al registrar actividad", e); }
 }
 
+function verificarBadgeHistorial(datosGrupo) {
+    const badge = document.getElementById('badgeHistorial');
+    if (!badge || !idPisoActual) return;
+
+    const ultimaAct = datosGrupo.ultima_actividad || 0;
+    const ultimoAutor = datosGrupo.ultimo_autor_actividad || "";
+    const vistoLocal = Number(localStorage.getItem(`visto_hist_${idPisoActual}`) || 0);
+
+    // Si nunca ha tenido marca local, inicializamos al momento actual para no encender en falso al primer inicio
+    if (vistoLocal === 0) {
+        localStorage.setItem(`visto_hist_${idPisoActual}`, String(ultimaAct || Date.now()));
+        badge.classList.add('hidden');
+        return;
+    }
+
+    const histAbierto = !document.getElementById('vistaHistorial').classList.contains('hidden');
+    if (histAbierto) {
+        localStorage.setItem(`visto_hist_${idPisoActual}`, String(Date.now()));
+        badge.classList.add('hidden');
+    } else if (ultimaAct > vistoLocal && ultimoAutor !== nombreUsuario) {
+        badge.classList.remove('hidden');
+    } else {
+        badge.classList.add('hidden');
+    }
+}
+
+// --- SISTEMA DE MODALES Y SELECTOR VISUAL DE COLORES ---
 window.mostrarModal = function({ titulo, mensaje, tipo = 'alert', valorInput = '' }) {
     return new Promise((resolve) => {
         const overlay = document.getElementById('iosModalOverlay');
         const titleEl = document.getElementById('iosModalTitle');
         const msgEl = document.getElementById('iosModalMessage');
+        const customEl = document.getElementById('iosModalCustomContent');
         const inputEl = document.getElementById('iosModalInput');
         const btnCancel = document.getElementById('iosModalBtnCancel');
         const btnConfirm = document.getElementById('iosModalBtnConfirm');
         
         titleEl.innerText = titulo;
         msgEl.innerText = mensaje;
+        msgEl.classList.remove('hidden');
+        customEl.innerHTML = '';
+        customEl.classList.add('hidden');
         inputEl.classList.add('hidden');
         btnCancel.classList.add('hidden');
+        btnConfirm.classList.remove('hidden');
         inputEl.value = valorInput;
         inputEl.type = (titulo.toLowerCase().includes('precio') || titulo.toLowerCase().includes('importe') || titulo.toLowerCase().includes('pin')) ? 'number' : 'text';
         
@@ -268,10 +321,81 @@ window.mostrarModal = function({ titulo, mensaje, tipo = 'alert', valorInput = '
         if (tipo === 'prompt') inputEl.classList.remove('hidden');
         
         overlay.classList.add('active');
-        const close = () => { overlay.classList.remove('active'); btnConfirm.onclick = null; btnCancel.onclick = null; };
+        const close = () => {
+            overlay.classList.remove('active');
+            btnConfirm.onclick = null;
+            btnCancel.onclick = null;
+            inputEl.onkeydown = null;
+        };
         
         btnConfirm.onclick = () => { window.playRetroSound('blip'); close(); if (tipo === 'prompt') resolve(inputEl.value); else resolve(true); };
         btnCancel.onclick = () => { window.playRetroSound('blip'); close(); if (tipo === 'prompt') resolve(null); else resolve(false); };
+
+        if (tipo === 'prompt') {
+            setTimeout(() => inputEl.focus(), 60);
+            inputEl.onkeydown = (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    btnConfirm.click();
+                }
+            };
+        }
+    });
+};
+
+window.mostrarSelectorColorModal = function(coloresDisponibles) {
+    return new Promise((resolve) => {
+        const overlay = document.getElementById('iosModalOverlay');
+        const titleEl = document.getElementById('iosModalTitle');
+        const msgEl = document.getElementById('iosModalMessage');
+        const customEl = document.getElementById('iosModalCustomContent');
+        const inputEl = document.getElementById('iosModalInput');
+        const btnCancel = document.getElementById('iosModalBtnCancel');
+        const btnConfirm = document.getElementById('iosModalBtnConfirm');
+
+        titleEl.innerText = "🎨 ELEGIR COLOR";
+        msgEl.innerText = "Toca el color que quieras para tu perfil:";
+        msgEl.classList.remove('hidden');
+        inputEl.classList.add('hidden');
+        btnConfirm.classList.add('hidden');
+        btnCancel.classList.remove('hidden');
+
+        let gridHtml = '<div class="color-picker-grid">';
+        coloresDisponibles.forEach(c => {
+            gridHtml += `
+                <button type="button" class="btn-color-option" data-hex="${c.hex}" style="border-color: ${c.hex};">
+                    <span class="color-swatch-dot" style="background: ${c.hex};"></span>
+                    <span>${c.nombreLimpio}</span>
+                </button>`;
+        });
+        gridHtml += '</div>';
+
+        customEl.innerHTML = gridHtml;
+        customEl.classList.remove('hidden');
+        overlay.classList.add('active');
+
+        const close = () => {
+            overlay.classList.remove('active');
+            customEl.innerHTML = '';
+            customEl.classList.add('hidden');
+            btnConfirm.classList.remove('hidden');
+            btnCancel.onclick = null;
+        };
+
+        customEl.querySelectorAll('.btn-color-option').forEach(btn => {
+            btn.onclick = () => {
+                const hex = btn.getAttribute('data-hex');
+                window.playRetroSound('blip');
+                close();
+                resolve(hex);
+            };
+        });
+
+        btnCancel.onclick = () => {
+            window.playRetroSound('blip');
+            close();
+            resolve(null);
+        };
     });
 };
 
@@ -457,12 +581,21 @@ document.getElementById('btnAñadirNombre').addEventListener('click', () => {
     }
 });
 
+// Soporte para tecla Enter al añadir inquilinos creando el piso
+document.getElementById('inputNuevoNombre').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('btnAñadirNombre').click();
+    }
+});
+
 function actualizarListaNuevosNombres() {
     const contenedor = document.getElementById('contenedorNuevosNombres'); 
-    contenedor.innerHTML = '';
+    let html = '';
     nombresNuevos.forEach((nombre, index) => { 
-        contenedor.innerHTML += `<div class="tag-nombre"><span>👾 ${nombre}</span><span style="cursor:pointer;" onclick="quitarNombre(${index})">❌</span></div>`; 
+        html += `<div class="tag-nombre"><span>👾 ${nombre}</span><span style="cursor:pointer;" onclick="quitarNombre(${index})">❌</span></div>`; 
     });
+    contenedor.innerHTML = html;
 }
 
 window.quitarNombre = function(index) { 
@@ -539,6 +672,7 @@ document.getElementById('btnCrear').addEventListener('click', async () => {
                 colores: coloresNuevos,
                 ajustes_faltas: {},
                 parche_notificado: PATCH_VERSION,
+                ultima_actividad: Date.now(),
                 tablon: tablonInicial, 
                 fecha_creacion: new Date().toISOString() 
             });
@@ -619,6 +753,7 @@ async function mostrarDashboard(nombre, id) {
                 else btnMaster.classList.add('hidden');
             }
 
+            verificarBadgeHistorial(datos);
             cargarTablon(datos.tablon || { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" });
             recalcularStrikesTotales();
             calcularBalancesYDeudas(ultimosGastos);
@@ -633,7 +768,7 @@ async function mostrarDashboard(nombre, id) {
     cargarListaGastos();
     cargarListaLimpieza();
     cargarListaCompra();
-    cargarHistorial();
+    // NOTA: cargarHistorial() ahora es Lazy Load y solo se conecta al abrir el botón 🔔
     activarNotificacionesPush();
 }
 
@@ -679,14 +814,14 @@ document.getElementById('btnCerrarInquilinos').addEventListener('click', () => {
 function renderGestionInquilinos() {
     const cont = document.getElementById('listaGestionInquilinos');
     if (!cont) return;
-    cont.innerHTML = '';
+    let html = '';
 
     participantesGrupo.forEach(p => {
         const esYo = p === nombreUsuario;
         const saldo = ultimosBalances[p] || 0;
         const infoSaldo = Math.abs(saldo) > 0.01 ? `Saldo: ${saldo > 0 ? '+' : ''}${saldo.toFixed(2)}€` : 'Cuentas a 0.00€';
 
-        cont.innerHTML += `
+        html += `
             <div class="manual-split-row">
                 <div style="min-width: 0; flex: 1; padding-right: 8px;">
                     <span style="color: ${getColor(p)}; font-weight: 700; font-size: 1.05em;">
@@ -700,6 +835,7 @@ function renderGestionInquilinos() {
                 </div>
             </div>`;
     });
+    cont.innerHTML = html;
 }
 
 document.getElementById('btnGuardarNuevoInquilino').addEventListener('click', async () => {
@@ -726,6 +862,14 @@ document.getElementById('btnGuardarNuevoInquilino').addEventListener('click', as
         registrarActividad(`**${nombreUsuario}** añadió a **${nuevo}** como inquilino del piso.`, "👥");
     } catch (e) {
         await window.mostrarAlerta("Error", "No se pudo añadir al inquilino.");
+    }
+});
+
+// Soporte para tecla Enter al añadir inquilino desde el panel
+document.getElementById('inputAñadirInquilinoPanel').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('btnGuardarNuevoInquilino').click();
     }
 });
 
@@ -967,10 +1111,10 @@ function renderPanelMaestro() {
     const contTareas = document.getElementById('listaAuditoriaTareasMaster');
     if (!contFaltas || !contTareas) return;
 
-    contFaltas.innerHTML = '';
+    let htmlFaltas = '';
     participantesGrupo.forEach(p => {
         const total = ultimosStrikes[p] || 0;
-        contFaltas.innerHTML += `
+        htmlFaltas += `
             <div class="manual-split-row">
                 <div>
                     <span style="color: ${getColor(p)}; font-weight: 700; font-size: 1.05em;">${getAvatar(p)} ${p}</span>
@@ -983,6 +1127,7 @@ function renderPanelMaestro() {
                 </div>
             </div>`;
     });
+    contFaltas.innerHTML = htmlFaltas;
 
     const tsActual = new Date(obtenerLunes(new Date())).getTime();
     const asigs = calcularAsignacionesParaSemana(new Date(tsActual));
@@ -991,9 +1136,9 @@ function renderPanelMaestro() {
     if (hechasEstaSemana.length === 0) {
         contTareas.innerHTML = '<p style="color: var(--text-muted); text-align: center; font-size: 0.85em; margin: 0;">Nadie ha marcado tareas como completadas esta semana todavía.</p>';
     } else {
-        contTareas.innerHTML = '';
+        let htmlTareas = '';
         hechasEstaSemana.forEach(a => {
-            contTareas.innerHTML += `
+            htmlTareas += `
                 <div class="manual-split-row">
                     <div>
                         <span style="font-weight: 700; color: var(--text-main);">${a.nombre_zona}</span>
@@ -1002,6 +1147,7 @@ function renderPanelMaestro() {
                     <button type="button" class="btn-bizum" style="background: var(--arcade-red); color: #fff;" onclick="anularTareaSemanaActual('${a.idZona}', '${a.nombre_zona.replace(/'/g, "\\'")}', '${a.leTocaA}')">❌ ANULAR</button>
                 </div>`;
         });
+        contTareas.innerHTML = htmlTareas;
     }
 }
 
@@ -1018,6 +1164,7 @@ document.getElementById('btnCambiarUsuarioMenu').addEventListener('click', async
     }
 });
 
+// AVATAR SE MANTIENE IGUAL (CON PROMPT DE EMOJI)
 document.getElementById('btnCambiarAvatar').addEventListener('click', async () => {
     menuPerfil.classList.add('hidden');
     const nuevoEmoji = await window.mostrarPrompt("Cambiar mi Avatar", "Escribe o pega el emoji para tu perfil (Ej: 👽, 🦊, 👾):");
@@ -1038,20 +1185,21 @@ document.getElementById('btnCambiarAvatar').addEventListener('click', async () =
     }
 });
 
+// SELECTOR VISUAL DE COLORES (1 CLIC SIN ESCRIBIR NÚMEROS)
 document.getElementById('btnCambiarColor').addEventListener('click', async () => {
     menuPerfil.classList.add('hidden');
     
     const todosLosColores = [
-        { id: "1", hex: "#ff453a", nombre: "🔴 Rojo" },
-        { id: "2", hex: "#ff9f0a", nombre: "🟠 Naranja" },
-        { id: "3", hex: "#ffd60a", nombre: "🟡 Amarillo" },
-        { id: "4", hex: "#32d74b", nombre: "🟢 Verde" },
-        { id: "5", hex: "#66d4cf", nombre: "🩵 Menta" },
-        { id: "6", hex: "#0a84ff", nombre: "🔵 Azul" },
-        { id: "7", hex: "#bf5af2", nombre: "🟣 Morado" },
-        { id: "8", hex: "#ff375f", nombre: "🩷 Rosa" },
-        { id: "9", hex: "#a2845e", nombre: "🟤 Marrón" },
-        { id: "10", hex: "#86868b", nombre: "⚪ Gris" }
+        { hex: "#ff453a", nombreLimpio: "Rojo" },
+        { hex: "#ff9f0a", nombreLimpio: "Naranja" },
+        { hex: "#ffd60a", nombreLimpio: "Amarillo" },
+        { hex: "#32d74b", nombreLimpio: "Verde" },
+        { hex: "#66d4cf", nombreLimpio: "Menta" },
+        { hex: "#0a84ff", nombreLimpio: "Azul" },
+        { hex: "#bf5af2", nombreLimpio: "Morado" },
+        { hex: "#ff375f", nombreLimpio: "Rosa" },
+        { hex: "#a2845e", nombreLimpio: "Marrón" },
+        { hex: "#86868b", nombreLimpio: "Gris" }
     ];
 
     const coloresEnUso = participantesGrupo
@@ -1065,17 +1213,8 @@ document.getElementById('btnCambiarColor').addEventListener('click', async () =>
         return await window.mostrarAlerta("Sin colores", "Ya no quedan colores libres en este piso.");
     }
 
-    let msg = "Escribe el número del color disponible:\n\n";
-    let mapaOpciones = {};
-    coloresDisponibles.forEach((c, index) => {
-        let numeroOpcion = (index + 1).toString();
-        msg += `${numeroOpcion}. ${c.nombre}\n`;
-        mapaOpciones[numeroOpcion] = c.hex;
-    });
-
-    const seleccion = await window.mostrarPrompt("Cambiar mi Color", msg);
+    const nuevoColor = await window.mostrarSelectorColorModal(coloresDisponibles);
     
-    let nuevoColor = mapaOpciones[seleccion ? seleccion.trim() : ""];
     if (nuevoColor) {
         try {
             const objUpdate = {};
@@ -1085,8 +1224,6 @@ document.getElementById('btnCambiarColor').addEventListener('click', async () =>
         } catch (e) {
             await window.mostrarAlerta("Error", "No se pudo cambiar el color.");
         }
-    } else if (seleccion !== null) {
-        await window.mostrarAlerta("Atención", "Número no válido de la lista disponible.");
     }
 });
 
@@ -1127,14 +1264,39 @@ document.getElementById('tabCompra').addEventListener('click', () => activarPest
 document.getElementById('tabLimpieza').addEventListener('click', () => activarPestaña('tabLimpieza', 'vistaLimpieza'));
 document.getElementById('tabRanking').addEventListener('click', () => activarPestaña('tabRanking', 'vistaRanking'));
 
-document.getElementById('btnAbrirGraficos').addEventListener('click', () => { window.playRetroSound('blip'); window.scrollTo(0, 0); document.body.style.overflow = 'hidden'; document.getElementById('vistaGraficos').classList.remove('hidden'); actualizarGraficos(); });
+document.getElementById('btnAbrirGraficos').addEventListener('click', async () => { 
+    window.playRetroSound('blip'); 
+    window.scrollTo(0, 0); 
+    document.body.style.overflow = 'hidden'; 
+    document.getElementById('vistaGraficos').classList.remove('hidden'); 
+    await asegurarChartJs();
+    actualizarGraficos(); 
+});
 document.getElementById('btnCerrarGraficos').addEventListener('click', () => { window.playRetroSound('blip'); document.body.style.overflow = 'auto'; document.getElementById('vistaGraficos').classList.add('hidden'); });
 
 document.getElementById('btnAbrirTablon').addEventListener('click', () => { window.playRetroSound('blip'); window.scrollTo(0, 0); document.body.style.overflow = 'hidden'; document.getElementById('vistaTablon').classList.remove('hidden'); });
 document.getElementById('btnCerrarTablon').addEventListener('click', () => { window.playRetroSound('blip'); document.body.style.overflow = 'auto'; document.getElementById('vistaTablon').classList.add('hidden'); });
 
-document.getElementById('btnAbrirHistorial').addEventListener('click', () => { window.playRetroSound('blip'); window.scrollTo(0, 0); document.body.style.overflow = 'hidden'; document.getElementById('vistaHistorial').classList.remove('hidden'); });
-document.getElementById('btnCerrarHistorial').addEventListener('click', () => { window.playRetroSound('blip'); document.body.style.overflow = 'auto'; document.getElementById('vistaHistorial').classList.add('hidden'); });
+// HISTORIAL CON CARGA DIFERIDA (LAZY LOAD) Y LIMPIEZA DEL PUNTO DE AVISO
+document.getElementById('btnAbrirHistorial').addEventListener('click', () => { 
+    window.playRetroSound('blip'); 
+    window.scrollTo(0, 0); 
+    document.body.style.overflow = 'hidden'; 
+    document.getElementById('vistaHistorial').classList.remove('hidden');
+    document.getElementById('badgeHistorial').classList.add('hidden');
+    if (idPisoActual) localStorage.setItem(`visto_hist_${idPisoActual}`, String(Date.now()));
+    cargarHistorial();
+});
+
+document.getElementById('btnCerrarHistorial').addEventListener('click', () => { 
+    window.playRetroSound('blip'); 
+    document.body.style.overflow = 'auto'; 
+    document.getElementById('vistaHistorial').classList.add('hidden');
+    if (unsubHistorial) {
+        unsubHistorial();
+        unsubHistorial = null;
+    }
+});
 
 document.getElementById('btnVaciarHistorial').addEventListener('click', async () => {
     window.playRetroSound('hit');
@@ -1165,24 +1327,26 @@ document.getElementById('btnVaciarHistorial').addEventListener('click', async ()
 
 function cargarHistorial() {
     if (unsubHistorial) unsubHistorial();
+    const lista = document.getElementById('listaHistorial');
+    lista.innerHTML = '<p style="color:var(--text-muted); text-align:center;">Cargando actividad...</p>';
+
     const q = query(collection(db, "grupos", idPisoActual, "historial"), orderBy("fecha", "desc"), limit(60));
     
     unsubHistorial = onSnapshot(q, (snap) => {
-        const lista = document.getElementById('listaHistorial');
-        lista.innerHTML = '';
         if (snap.empty) {
             lista.innerHTML = '<p style="color:var(--text-muted); text-align:center;">No hay actividad reciente.</p>';
             return;
         }
-        snap.forEach(doc => {
-            const act = doc.data();
+        let html = '';
+        snap.forEach(docSnap => {
+            const act = docSnap.data();
             const fechaStr = new Date(act.fecha).toLocaleString([], {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
             
             let mensajeFormateado = act.mensaje.replace(/\*\*(.*?)\*\*/g, (match, nombreExtraido) => {
                 return `<span style="color: ${getColor(nombreExtraido)}; font-weight: bold;">${nombreExtraido}</span>`;
             });
             
-            lista.innerHTML += `
+            html += `
                 <div class="item-lista">
                     <div style="font-size: 1.5em; margin-right: 12px;">${act.icono}</div>
                     <div class="item-info">
@@ -1191,6 +1355,7 @@ function cargarHistorial() {
                     </div>
                 </div>`;
         });
+        lista.innerHTML = html;
     });
 }
 
@@ -1325,23 +1490,25 @@ function prepararFormularioGastos(gastoObj = null) {
         selectPagador.appendChild(opt); 
     }); 
     
-    divInvolucrados.innerHTML = '';
+    let htmlInv = '';
     if (tipoDiv === 'iguales') {
         infoManual.classList.add('hidden');
         participantesGrupo.forEach(p => {
             let checked = true;
             if (gastoObj && Array.isArray(gastoObj.involucrados)) checked = typeof gastoObj.involucrados[0] === 'string' ? gastoObj.involucrados.includes(p) : gastoObj.involucrados.some(i => i.nombre === p);
-            divInvolucrados.innerHTML += `<label><input type="checkbox" value="${p}" class="gasto-cb" ${checked ? 'checked' : ''}> <span style="color: ${getColor(p)}">${getAvatar(p)} ${p}</span></label>`;
+            htmlInv += `<label><input type="checkbox" value="${p}" class="gasto-cb" ${checked ? 'checked' : ''}> <span style="color: ${getColor(p)}">${getAvatar(p)} ${p}</span></label>`;
         });
+        divInvolucrados.innerHTML = htmlInv;
     } else {
         infoManual.classList.remove('hidden');
         participantesGrupo.forEach(p => {
             let val = '';
             if (gastoObj && Array.isArray(gastoObj.involucrados) && typeof gastoObj.involucrados[0] === 'object') { const found = gastoObj.involucrados.find(i => i.nombre === p); if (found) val = found.importe; }
-            divInvolucrados.innerHTML += `<div class="manual-split-row"><span style="color: ${getColor(p)}">${getAvatar(p)} ${p}</span><input type="number" class="manual-importe" data-nombre="${p}" step="0.01" min="0" placeholder="0.00" value="${val}"></div>`;
+            htmlInv += `<div class="manual-split-row"><span style="color: ${getColor(p)}">${getAvatar(p)} ${p}</span><input type="number" class="manual-importe" data-nombre="${p}" step="0.01" min="0" placeholder="0.00" value="${val}"></div>`;
         });
+        divInvolucrados.innerHTML = htmlInv;
         document.querySelectorAll('.manual-importe').forEach(inp => inp.addEventListener('input', calcularFaltanteManual));
-        document.getElementById('importeGasto').addEventListener('input', calcularFaltanteManual);
+        document.getElementById('importeGasto').oninput = calcularFaltanteManual;
         calcularFaltanteManual();
     }
 }
@@ -1495,15 +1662,13 @@ function actualizarOpcionesFiltroMes() {
         }
     });
 
-    select.innerHTML = '<option value="todos">📅 Todos</option>';
+    let htmlOpts = '<option value="todos">📅 Todos</option>';
     Array.from(mesesSet).sort().reverse().forEach(key => {
         const [year, month] = key.split('-');
         const label = `${nombresMeses[parseInt(month, 10) - 1]} ${year}`;
-        const opt = document.createElement('option');
-        opt.value = key;
-        opt.innerText = label;
-        select.appendChild(opt);
+        htmlOpts += `<option value="${key}">${label}</option>`;
     });
+    select.innerHTML = htmlOpts;
 
     if ( Array.from(select.options).some(o => o.value === valorPrevio) ) {
         select.value = valorPrevio;
@@ -1545,12 +1710,8 @@ function renderListaGastosFiltrada() {
         }
     }
 
-    listaHtml.innerHTML = '';
+    let html = '';
     gastosAMostrar.forEach((gasto) => {
-        const divGasto = document.createElement('div');
-        divGasto.className = 'item-lista gasto-row';
-        divGasto.onclick = () => window.abrirEditarGastoPorId(gasto.id);
-
         const d = new Date(gasto.fecha);
         const fechaCorta = !isNaN(d) ? d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }) : '';
         
@@ -1560,42 +1721,45 @@ function renderListaGastosFiltrada() {
                 receptor = typeof gasto.involucrados[0] === 'object' ? gasto.involucrados[0].nombre : gasto.involucrados[0];
             }
             
-            // Borde e importe de los Bizums en verde vivo (#32d74b)
-            divGasto.innerHTML = `
-                <div class="gasto-cat-icon" style="border-color: #32d74b;">💸</div>
-                <div class="item-info">
-                    <span class="item-titulo">Pago por Bizum</span>
-                    <span class="item-detalle">
-                        <span style="color:${getColor(gasto.pagador)}; font-weight: 700;">${gasto.pagador}</span> 
-                        ➔ 
-                        <span style="color:${getColor(receptor)}; font-weight: 700;">${receptor}</span> 
-                        • ${fechaCorta}
-                    </span>
-                </div>
-                <span class="gasto-importe" style="color: #32d74b;">${gasto.importe.toFixed(2)}€</span>`;
+            html += `
+                <div class="item-lista gasto-row" onclick="abrirEditarGastoPorId('${gasto.id}')">
+                    <div class="gasto-cat-icon" style="border-color: #32d74b;">💸</div>
+                    <div class="item-info">
+                        <span class="item-titulo">Pago por Bizum</span>
+                        <span class="item-detalle">
+                            <span style="color:${getColor(gasto.pagador)}; font-weight: 700;">${gasto.pagador}</span> 
+                            ➔ 
+                            <span style="color:${getColor(receptor)}; font-weight: 700;">${receptor}</span> 
+                            • ${fechaCorta}
+                        </span>
+                    </div>
+                    <span class="gasto-importe" style="color: #32d74b;">${gasto.importe.toFixed(2)}€</span>
+                </div>`;
         } else {
             const esManual = typeof gasto.involucrados[0] === 'object';
             const esTodos = !esManual && gasto.involucrados.length === participantesGrupo.length;
             const infoReparto = esManual ? ' · Manual' : (!esTodos ? ` · ${gasto.involucrados.length}p` : '');
             
-            // Colores por categoría: Piso en azul (#0a84ff), Facturas en naranja (#ff9f0a), Ocio en morado (#bf5af2)
+            // Colores: Piso en azul (#0a84ff), Facturas en naranja (#ff9f0a), Ocio en morado (#bf5af2)
             const catStr = gasto.categoria || '🏠 Piso';
             const iconoCat = catStr.split(' ')[0];
             const colorBordeCat = catStr.includes('Facturas') ? '#ff9f0a' : (catStr.includes('Ocio') ? '#bf5af2' : '#0a84ff');
             
-            divGasto.innerHTML = `
-                <div class="gasto-cat-icon" style="border-color: ${colorBordeCat};">${iconoCat}</div>
-                <div class="item-info">
-                    <span class="item-titulo">${gasto.concepto}</span>
-                    <span class="item-detalle">
-                        <span style="color:${getColor(gasto.pagador)}; font-weight: 700;">${getAvatar(gasto.pagador)} ${gasto.pagador}</span> 
-                        • ${fechaCorta}${infoReparto}
-                    </span>
-                </div>
-                <span class="gasto-importe">${gasto.importe.toFixed(2)}€</span>`;
+            html += `
+                <div class="item-lista gasto-row" onclick="abrirEditarGastoPorId('${gasto.id}')">
+                    <div class="gasto-cat-icon" style="border-color: ${colorBordeCat};">${iconoCat}</div>
+                    <div class="item-info">
+                        <span class="item-titulo">${gasto.concepto}</span>
+                        <span class="item-detalle">
+                            <span style="color:${getColor(gasto.pagador)}; font-weight: 700;">${getAvatar(gasto.pagador)} ${gasto.pagador}</span> 
+                            • ${fechaCorta}${infoReparto}
+                        </span>
+                    </div>
+                    <span class="gasto-importe">${gasto.importe.toFixed(2)}€</span>
+                </div>`;
         }
-        listaHtml.appendChild(divGasto);
     });
+    listaHtml.innerHTML = html;
 }
 
 function cargarListaGastos() {
@@ -1612,7 +1776,7 @@ function cargarListaGastos() {
             if (btnMas) btnMas.classList.add('hidden');
             document.getElementById('listaBalances').innerHTML = '<p style="color:var(--text-muted); grid-column: span 2; text-align:center; margin: 6px 0;">Sin actividad</p>';
             document.getElementById('listaDeudas').innerHTML = ''; 
-            generarRankingGlobal(); 
+            programarRankingGlobal(); 
             if(document.getElementById('vistaGraficos').classList.contains('hidden') === false) actualizarGraficos();
             return;
         }
@@ -1672,7 +1836,7 @@ function calcularBalancesYDeudas(gastos) {
         }
     }
     document.getElementById('listaDeudas').innerHTML = htmlDeudas;
-    generarRankingGlobal();
+    programarRankingGlobal();
 }
 
 window.registrarBizum = async function(deudor, acreedor, cantidad) {
@@ -1697,9 +1861,18 @@ window.registrarBizum = async function(deudor, acreedor, cantidad) {
 document.getElementById('btnAñadirArticulo').addEventListener('click', async () => {
     const input = document.getElementById('inputNuevoArticulo'); const articulo = input.value.trim();
     if (!articulo) return; input.value = '';
+    input.focus();
     window.playRetroSound('blip');
     await addDoc(collection(db, "grupos", idPisoActual, "compra"), { articulo: articulo, añadidoPor: nombreUsuario, fecha: new Date().toISOString() });
     registrarActividad(`**${nombreUsuario}** añadió "${articulo}" a la lista de la compra.`, "🛒");
+});
+
+// Soporte para tecla Enter al añadir artículo a la compra
+document.getElementById('inputNuevoArticulo').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('btnAñadirArticulo').click();
+    }
 });
 
 function cargarListaCompra() {
@@ -1709,10 +1882,11 @@ function cargarListaCompra() {
     
     unsubCompra = onSnapshot(q, (querySnapshot) => {
         if (querySnapshot.empty) { listaHtml.innerHTML = '<p style="color:var(--text-muted); text-align:center;">Inventario vacío.</p>'; document.getElementById('btnComprarSeleccionados').disabled = true; return; }
-        document.getElementById('btnComprarSeleccionados').disabled = false; listaHtml.innerHTML = '';
+        document.getElementById('btnComprarSeleccionados').disabled = false;
+        let html = '';
         querySnapshot.forEach(docSnap => {
             const item = docSnap.data();
-            listaHtml.innerHTML += `
+            html += `
                 <div class="manual-split-row" style="margin-bottom: 6px;">
                     <label style="flex:1; display:flex; align-items:center; gap:10px; cursor:pointer;">
                         <input type="checkbox" class="cb-articulo" value="${docSnap.id}" data-nombre="${item.articulo}">
@@ -1721,6 +1895,7 @@ function cargarListaCompra() {
                     <button type="button" onclick="borrarArticulo('${docSnap.id}', '${item.articulo.replace(/'/g, "\\'")}')" style="background:none; border:none; box-shadow:none; width:auto; margin:0; padding:4px; color:var(--arcade-red); font-size:1.1em;">🗑️</button>
                 </div>`;
         });
+        listaHtml.innerHTML = html;
     });
 }
 
@@ -1739,11 +1914,16 @@ document.getElementById('btnComprarSeleccionados').addEventListener('click', asy
     
     resetFormGasto();
     document.getElementById('conceptoGasto').value = "🛒 Compra: " + conceptoStr;
+    document.getElementById('categoriaGasto').value = "🏠 Piso";
     window.articulosPendientesDeBorrar = seleccionados.map(cb => cb.value); 
     
     activarPestaña('tabGastos', 'vistaGastos');
     mostrarModoFormularioGasto(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Enfocar automáticamente el campo del importe para abrir el teclado numérico
+    setTimeout(() => {
+        document.getElementById('importeGasto').focus();
+    }, 120);
 });
 
 // --- MÓDULO LIMPIEZA, CALENDARIO & SISTEMA VAR ---
@@ -1751,8 +1931,10 @@ function resetFormZona() {
     idZonaEditando = null; document.getElementById('tituloFormZona').innerText = 'NUEVA ZONA';
     document.getElementById('nombreZona').value = ''; document.getElementById('frecuenciaZona').value = '1';
     document.getElementById('btnGuardarZona').innerText = 'GUARDAR'; document.getElementById('btnEliminarZona').classList.add('hidden');
-    const div = document.getElementById('responsablesZona'); div.innerHTML = '';
-    participantesGrupo.forEach(p => div.innerHTML += `<label><input type="checkbox" value="${p}" checked> <span style="color: ${getColor(p)}; font-weight: bold;">${getAvatar(p)} ${p}</span></label>`);
+    const div = document.getElementById('responsablesZona');
+    let html = '';
+    participantesGrupo.forEach(p => html += `<label><input type="checkbox" value="${p}" checked> <span style="color: ${getColor(p)}; font-weight: bold;">${getAvatar(p)} ${p}</span></label>`);
+    div.innerHTML = html;
 }
 
 document.getElementById('btnMostrarFormZona').addEventListener('click', () => {
@@ -1890,14 +2072,14 @@ window.renderFaltasPolicial = function() {
     }
     
     cont.classList.remove('hidden');
-    lista.innerHTML = '';
+    let html = '';
     
     infractores.forEach(infractor => {
         let faltas = ultimosStrikes[infractor];
         let nivel = faltas >= 3 ? "DEBE RONDA AL PISO" : (faltas === 2 ? "REINCIDENTE" : "PRIMER AVISO");
         let color = faltas >= 3 ? "#ff0055" : (faltas === 2 ? "#fb5607" : "#ffbe0b");
         
-        lista.innerHTML += `
+        html += `
             <div style="background: #151828; border: 2px solid ${color}; padding: 10px 12px; border-radius: 4px; display: flex; align-items: center; justify-content: space-between;">
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <div style="font-size: 1.8em;">${getAvatar(infractor)}</div>
@@ -1913,6 +2095,7 @@ window.renderFaltasPolicial = function() {
             </div>
         `;
     });
+    lista.innerHTML = html;
 };
 
 function recalcularStrikesTotales() {
@@ -1960,7 +2143,7 @@ function recalcularStrikesTotales() {
     renderCalendarioMensual(); 
     if (typeof window.renderFaltasPolicial === 'function') window.renderFaltasPolicial();
     if (!document.getElementById('vistaMaster').classList.contains('hidden')) renderPanelMaestro();
-    generarRankingGlobal();
+    programarRankingGlobal();
 }
 
 function cargarListaLimpieza() {
@@ -2089,10 +2272,11 @@ function renderCalendarioMensual() {
     if (zonasLimpiezaCache.length === 0) return cont.innerHTML = '<p style="color:var(--text-muted);">No hay zonas.</p>';
     const mes = fechaCalendario.getMonth(); const anio = fechaCalendario.getFullYear();
     const nombres = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-    document.getElementById('textoMesAnio').innerText = `${nombres[mes]} ${anio}`; cont.innerHTML = '';
+    document.getElementById('textoMesAnio').innerText = `${nombres[mes]} ${anio}`;
     let sem = []; let pivot = new Date(obtenerLunes(new Date(anio, mes, 1)));
     while (pivot.getMonth() === mes || (new Date(pivot.getTime() + 6*86400000)).getMonth() === mes) { sem.push(new Date(pivot)); pivot = new Date(pivot.getTime() + 7 * 86400000); }
     const hoy = new Date(obtenerLunes(new Date())).getTime();
+    let htmlTotal = '';
     sem.forEach(l => {
         const dom = new Date(l.getTime() + 6*86400000); const esHoy = l.getTime() === hoy;
         const asigsSem = calcularAsignacionesParaSemana(l);
@@ -2106,8 +2290,9 @@ function renderCalendarioMensual() {
             let check = conf ? (String(conf).includes('_Tarde') ? '☑️ ' : '✅ ') : '';
             html += `<div style="display:flex; justify-content:space-between; margin-bottom:6px; ${esM && !conf ? 'background: rgba(46, 196, 182, 0.12); padding: 4px 8px; border-radius: 2px; border-left: 3px solid var(--arcade-green);' : 'padding: 4px 8px;'}"><span style="font-weight:600;">${a.nombre_zona}</span><span style="color:${esM && !conf ? 'var(--arcade-yellow)' : getColor(a.leTocaA)}; font-weight:700;">${check}${esM ? '¡Te toca!' : getAvatar(a.leTocaA) + ' ' + a.leTocaA}</span></div>`;
         });
-        cont.innerHTML += html + `</div>`;
+        htmlTotal += html + `</div>`;
     });
+    cont.innerHTML = htmlTotal;
 }
 
 document.getElementById('btnToggleCalendario').addEventListener('click', () => {
@@ -2162,7 +2347,14 @@ document.getElementById('btnCopiarWifi').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(pass); window.playRetroSound('blip'); await window.mostrarAlerta("Copiado", "Contraseña copiada al portapapeles."); } catch (e) { await window.mostrarAlerta("Contraseña", pass); }
 });
 
-// --- MÓDULO RANKING + NIVELES RPG (LVL & XP) ---
+// --- MÓDULO RANKING + NIVELES RPG CON DEBOUNCE (EVITA CÁLCULOS TRIPLICADOS) ---
+function programarRankingGlobal() {
+    if (rankingDebounceTimer) clearTimeout(rankingDebounceTimer);
+    rankingDebounceTimer = setTimeout(() => {
+        generarRankingGlobal();
+    }, 50);
+}
+
 function generarHash(str) {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
