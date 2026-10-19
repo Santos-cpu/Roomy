@@ -61,7 +61,7 @@
             padding: 16px;
             border: 2px solid var(--border-color);
             border-radius: 4px;
-            margin-bottom: 16px;
+            margin-bottom: 14px;
             box-shadow: 4px 4px 0px #000000;
         }
 
@@ -162,11 +162,12 @@
             color: #000;
             border: 2px solid #fff;
             width: auto;
-            padding: 8px 10px;
+            padding: 7px 10px;
             margin: 0;
             font-family: var(--font-pixel);
-            font-size: 9px;
+            font-size: 8.5px;
             box-shadow: 0 3px 0 #b57c00;
+            flex-shrink: 0;
         }
 
         /* Plantillas rápidas de 1 clic */
@@ -255,7 +256,7 @@
             padding: 4px;
             border: 2px solid var(--border-color);
             border-radius: 4px;
-            margin-bottom: 16px;
+            margin-bottom: 14px;
             gap: 4px;
             box-shadow: 4px 4px 0px #000000;
         }
@@ -287,45 +288,73 @@
 
         /* Listas e Items */
         .item-lista {
-            border-bottom: 2px dashed #262b44;
-            padding: 12px 0;
+            border-bottom: 1px solid #232842;
+            padding: 10px 0;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 10px;
         }
 
         .item-lista:last-child {
             border-bottom: none;
         }
 
+        /* Filas de gasto interactivas y limpias */
+        .gasto-row {
+            cursor: pointer;
+            padding: 10px 8px;
+            margin: 0 -8px;
+            border-radius: 4px;
+            transition: background 0.12s;
+        }
+
+        .gasto-row:active {
+            background: var(--bg-panel);
+        }
+
+        .gasto-cat-icon {
+            width: 34px;
+            height: 34px;
+            background: #090a10;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.05em;
+            flex-shrink: 0;
+        }
+
         .item-info {
             display: flex;
             flex-direction: column;
             flex: 1;
-            padding-right: 10px;
+            min-width: 0;
         }
 
         .item-titulo {
             font-weight: 700;
-            font-size: 1.05em;
-            word-break: break-word;
+            font-size: 1em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
             color: var(--text-main);
-            display: flex;
-            align-items: center;
-            gap: 6px;
         }
 
         .item-detalle {
-            font-size: 0.85em;
+            font-size: 0.82em;
             color: var(--text-muted);
-            margin-top: 3px;
-            line-height: 1.3;
+            margin-top: 2px;
+            line-height: 1.25;
         }
 
         .gasto-importe {
             font-family: var(--font-pixel);
-            font-size: 0.85em;
+            font-size: 0.8em;
             color: var(--arcade-yellow);
+            white-space: nowrap;
+            text-align: right;
         }
 
         /* Cuadrícula compacta para Balances */
@@ -333,30 +362,31 @@
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             gap: 8px;
-            margin-bottom: 14px;
         }
 
         .balance-item {
             background: #090a10;
-            border: 2px solid #262b44;
+            border: 1px solid #2a3152;
             border-radius: 4px;
             padding: 8px 10px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 0.95em;
+            font-size: 0.92em;
         }
 
         .deuda-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: var(--bg-panel);
-            border: 2px solid var(--border-color);
-            padding: 10px 12px;
+            gap: 8px;
+            background: #090a10;
+            border: 1px solid var(--border-color);
+            border-left: 3px solid var(--arcade-yellow);
+            padding: 9px 10px;
             border-radius: 4px;
-            margin-bottom: 8px;
-            font-size: 0.95em;
+            margin-top: 8px;
+            font-size: 0.9em;
         }
 
         .checkbox-group {
@@ -448,7 +478,7 @@
         }
 
         h2 { font-size: 1.1em; color: var(--arcade-yellow); }
-        h4 { font-size: 0.78em; color: var(--border-highlight); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+        h4 { font-size: 0.75em; color: var(--border-highlight); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
 
         .info-block {
             background: var(--bg-card);
@@ -688,15 +718,16 @@
         <!-- VISTAS PRINCIPALES -->
         <div id="vistasPrincipales">
             
-            <!-- VISTA: GASTOS -->
-            <div id="vistaGastos" class="card">
-                <button id="btnMostrarFormGasto">+ NUEVO GASTO</button>
+            <!-- VISTA: GASTOS (REORGANIZADA EN TARJETAS LIMPIAS) -->
+            <div id="vistaGastos">
                 
-                <div id="formGasto" class="hidden" style="background: #090a10; padding: 14px; border-radius: 4px; margin-bottom: 18px; border: 2px solid var(--border-highlight);">
+                <button id="btnMostrarFormGasto" style="margin-bottom: 14px;">+ AÑADIR GASTO</button>
+                
+                <!-- TARJETA FORMULARIO (Modo enfoque: oculta el resto al abrirse) -->
+                <div id="formGasto" class="card hidden" style="border-color: var(--border-highlight);">
                     <h4 id="tituloFormGasto">NUEVO GASTO</h4>
                     
-                    <!-- Plantillas Rápidas reducidas a las 3 pedidas -->
-                    <label style="color: var(--text-muted); font-size: 0.8em; display: block; margin-bottom: 6px;">Plantillas rápidas (1 clic):</label>
+                    <label style="color: var(--text-muted); font-size: 0.8em; display: block; margin-bottom: 6px;">Acceso rápido:</label>
                     <div class="plantillas-grid">
                         <button type="button" class="btn-plantilla" onclick="usarPlantillaGasto('🌐 Internet / Wi-Fi', '💡 Facturas')">🌐 Wi-Fi</button>
                         <button type="button" class="btn-plantilla" onclick="usarPlantillaGasto('🛒 Compra Súper', '🏠 Piso')">🛒 Súper</button>
@@ -706,18 +737,23 @@
                     <input type="text" id="conceptoGasto" placeholder="Concepto (Ej. Mercadona)">
                     <input type="number" id="importeGasto" placeholder="Importe total (€)" step="0.01" min="0">
                     
-                    <label style="color: var(--text-muted); font-size: 0.85em; display: block; margin-bottom: 6px;">Categoría:</label>
-                    <select id="categoriaGasto">
-                        <option value="🏠 Piso">🏠 Piso</option>
-                        <option value="💡 Facturas">💡 Facturas</option>
-                        <option value="🍻 Ocio">🍻 Ocio</option>
-                    </select>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <div>
+                            <label style="color: var(--text-muted); font-size: 0.8em; display: block; margin-bottom: 4px;">Categoría:</label>
+                            <select id="categoriaGasto" style="padding: 10px;">
+                                <option value="🏠 Piso">🏠 Piso</option>
+                                <option value="💡 Facturas">💡 Facturas</option>
+                                <option value="🍻 Ocio">🍻 Ocio</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="color: var(--text-muted); font-size: 0.8em; display: block; margin-bottom: 4px;">Pagado por:</label>
+                            <select id="pagadorGasto" style="padding: 10px;"></select>
+                        </div>
+                    </div>
                     
-                    <label style="color: var(--text-muted); font-size: 0.85em; display: block; margin-bottom: 6px;">¿Quién ha pagado?</label>
-                    <select id="pagadorGasto"></select>
-                    
-                    <label style="color: var(--text-muted); font-size: 0.85em; display: block; margin-bottom: 6px;">Modo de reparto:</label>
-                    <select id="tipoDivisionGasto">
+                    <label style="color: var(--text-muted); font-size: 0.8em; display: block; margin-bottom: 4px;">Modo de reparto:</label>
+                    <select id="tipoDivisionGasto" style="padding: 10px;">
                         <option value="iguales">A partes iguales</option>
                         <option value="manual">Manualmente</option>
                     </select>
@@ -732,26 +768,28 @@
                     <button type="button" id="btnCancelarGasto" class="btn-secundario" style="margin-bottom: 0;">CANCELAR</button>
                 </div>
                 
-                <div id="seccionBalances" style="margin-bottom: 16px;">
-                    <h4>ESTADO DE CUENTAS</h4>
+                <!-- TARJETA 1: SALDOS Y BIZUMS -->
+                <div id="seccionBalances" class="card">
+                    <h4 style="margin-bottom: 10px;">💰 SALDOS Y BIZUMS</h4>
                     <div id="listaBalances" class="balances-grid">Calculando...</div>
-                    <div id="listaDeudas"></div>
+                    <div id="listaDeudas" style="margin-top: 10px;"></div>
                 </div>
                 
-                <hr>
-                
-                <div id="listaGastosContenedor">
-                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-bottom: 10px;">
-                        <h4 style="margin: 0;">REGISTRO</h4>
-                        <div style="display: flex; gap: 6px; align-items: center;">
-                            <select id="filtroMesGastos" style="width: auto; margin: 0; padding: 6px 8px; font-size: 0.8em; height: 32px;">
-                                <option value="todos">📅 Todos</option>
-                            </select>
-                            <button type="button" id="btnArchivarGastos" class="btn-outline" style="width: auto; padding: 6px 8px; margin: 0; font-size: 8px; height: 32px;" title="Limpiar historial cuando las cuentas estén a 0">🧹 LIQUIDAR</button>
-                        </div>
+                <!-- TARJETA 2: HISTORIAL DE GASTOS -->
+                <div id="listaGastosContenedor" class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px;">
+                        <h4 style="margin: 0;">📜 HISTORIAL</h4>
+                        <select id="filtroMesGastos" style="width: auto; margin: 0; padding: 4px 8px; font-size: 0.82em; height: 30px;">
+                            <option value="todos">📅 Todos</option>
+                        </select>
                     </div>
+                    <p style="font-size: 0.75em; color: var(--text-muted); margin: 0 0 8px 0;">Toca cualquier gasto de la lista para editarlo o borrarlo.</p>
+                    
                     <div id="listaGastos">Cargando...</div>
+
+                    <button type="button" id="btnArchivarGastos" class="btn-secundario" style="margin-top: 14px; margin-bottom: 0; padding: 9px; font-size: 8.5px; color: var(--text-muted);">🧹 LIQUIDAR HISTORIAL (CUENTAS A 0€)</button>
                 </div>
+
             </div>
 
             <!-- VISTA: COMPRA -->
