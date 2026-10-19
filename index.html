@@ -227,6 +227,7 @@
         }
 
         .btn-header {
+            position: relative;
             background: var(--bg-panel);
             border: 2px solid var(--border-color);
             color: var(--text-main);
@@ -244,6 +245,20 @@
             gap: 4px;
             margin: 0;
             box-shadow: 0 3px 0 #000;
+        }
+
+        /* Punto de aviso de nueva actividad en la campana */
+        .notif-dot {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            width: 10px;
+            height: 10px;
+            background-color: var(--arcade-red);
+            border: 2px solid #ffffff;
+            border-radius: 2px;
+            box-shadow: 0 0 6px var(--arcade-red);
+            pointer-events: none;
         }
 
         .hidden { display: none !important; }
@@ -541,6 +556,39 @@
             justify-content: center;
         }
 
+        /* Selector visual de colores en el Modal */
+        .color-picker-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            padding: 0 16px 16px 16px;
+        }
+
+        .btn-color-option {
+            background: #090a10;
+            color: var(--text-main);
+            border: 2px solid var(--border-color);
+            border-radius: 4px;
+            padding: 10px 8px;
+            margin: 0;
+            font-family: var(--font-body);
+            font-size: 0.9em;
+            font-weight: 700;
+            text-transform: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 2px 0 #000;
+        }
+
+        .color-swatch-dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+            border: 1px solid #fff;
+            flex-shrink: 0;
+        }
+
         /* Modal RPG */
         #iosModalOverlay {
             position: fixed;
@@ -562,7 +610,7 @@
 
         #iosModalBox {
             background: var(--bg-card);
-            width: 300px;
+            width: 310px;
             border: 3px solid #ffffff;
             border-radius: 4px;
             text-align: center;
@@ -672,7 +720,9 @@
             <div style="display: flex; align-items: center; gap: 6px;">
                 <button id="btnAbrirGraficos" class="btn-header" title="Estadísticas">📊</button>
                 <button id="btnAbrirTablon" class="btn-header" title="Info del Piso">📌</button>
-                <button id="btnAbrirHistorial" class="btn-header" title="Registro de Actividad">🔔</button>
+                <button id="btnAbrirHistorial" class="btn-header" title="Registro de Actividad">
+                    🔔<span id="badgeHistorial" class="notif-dot hidden"></span>
+                </button>
                 
                 <!-- Botón de Jugador + Menú Pausa Con Todo Integrado -->
                 <div style="position: relative;" id="contenedorMenuPerfil">
@@ -1037,11 +1087,12 @@
 
     </div>
 
-    <!-- MODAL RETRO -->
+    <!-- MODAL RETRO (Soporta alertas, inputs y el nuevo selector visual de colores) -->
     <div id="iosModalOverlay">
         <div id="iosModalBox">
             <h3 id="iosModalTitle">TÍTULO</h3>
             <p id="iosModalMessage">Mensaje</p>
+            <div id="iosModalCustomContent" class="hidden"></div>
             <input type="text" id="iosModalInput" class="hidden" autocomplete="off">
             <div id="iosModalButtons">
                 <button type="button" id="iosModalBtnCancel" class="ios-btn">CANCELAR</button>
@@ -1050,7 +1101,7 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chart.js se carga bajo demanda desde app.js al abrir Estadísticas -->
     <script type="module" src="app.js"></script>
 </body>
 </html>
