@@ -1,53 +1,59 @@
-const CACHE_NAME = 'piso-app-v2'; // Subimos la versión para forzar la actualización
-const urlsToCache = [
-  '/',
-  '/index.html',
-  '/app.js',
-  '/manifest.json'
+const CACHE_NAME = 'roomy-v2.1-retro';
+const ASSETS = [
+    './',
+    './index.html',
+    './app.js',
+    './manifest.json',
+    './icon-192.png',
+    './icon-512.png'
 ];
 
-// 1. Instalación
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache))
-  );
-  // Obliga al nuevo Service Worker a tomar el control inmediatamente
-  self.skipWaiting(); 
+self.addEventListener('install', (event) => {
+    self.skipWaiting();
+    event.waitUntil(
+        caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    );
 });
 
-// 2. Activación y limpieza de versiones antiguas
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('Borrando caché antigua:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
-  );
-  self.clients.claim();
+self.addEventListener('activate', (event) => {
+    event.waitUntil(
+        caches.keys().then((keys) =>
+            Promise.all(
+                keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+            )
+        ).then(() => self.clients.claim())
+    );
 });
 
-// 3. Estrategia "Network First" (Red primero)
-self.addEventListener('fetch', event => {
-  // Solo aplicamos esto a peticiones GET (no a Firebase/Firestore)
-  if (event.request.method !== 'GET') return;
+self.addEventListener('fetch', (event) => {
+    const req = event.request;
+    if (req.method !== 'GET') return;
 
-  event.respondWith(
-    fetch(event.request)
-      .then(response => {
-        // Si hay internet y la petición tiene éxito, guardamos una copia fresca en caché
-        const responseClone = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
-        return response;
-      })
-      .catch(() => {
-        // Si no hay internet (el fetch falla), devolvemos lo que haya en la caché
-        return caches.match(event.request);
-      })
-  );
+    const url = new URL(req.url);
+
+    // Caché para las fuentes de Google Fonts (evita parpadeos de texto y ahorra datos)
+    if (url.origin.includes('fonts.googleapis.com') || url.origin.includes('fonts.gstatic.com')) {
+        event.respondWith(
+            caches.match(req).then((cached) => {
+                const networked = fetch(req).then((res) => {
+                    const copy = res.clone();
+                    caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+                    return res;
+                }).catch(() => cached);
+                return cached || networked;
+            })
+        );
+        return;
+    }
+
+    // Estrategia Network-First para los archivos propios de la app (siempre actualizados si hay red, y offline si no hay)
+    if (url.origin === self.location.origin) {
+        event.respondWith(
+            fetch(req).then((res) => {
+                const copy = res.clone();
+                caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+                return res;
+            }).catch(() => caches.match(req))
+        );
+    }
 });
