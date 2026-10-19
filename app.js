@@ -1253,7 +1253,7 @@ function calcularBalancesYDeudas(gastos) {
     let htmlBalances = ''; let deudores = []; let acreedores = [];
     for (let persona in ultimosBalances) {
         let saldo = ultimosBalances[persona];
-        let colorSaldo = saldo >= -0.01 && saldo <= 0.01 ? '#f0f4ff' : (saldo > 0 ? '#2ec4b6' : '#ff0055');
+        let colorSaldo = saldo >= -0.01 && saldo <= 0.01 ? '#f0f4ff' : (saldo > 0 ? '#00ff66' : '#ff0055');
         let signo = saldo > 0.01 ? '+' : '';
         htmlBalances += `
             <div class="balance-item">
