@@ -30,6 +30,9 @@ const MASTER_PIN = "2026";
 // IDENTIFICADOR DE VERSIÓN PARA EL POPUP DE NOVEDADES
 const PATCH_VERSION = "v2.0_retro";
 
+const EMOJIS_BASE = ["🦊", "🐼", "🐵", "🐶", "🐱", "🐯", "🐨", "🐸", "🐷", "🐻", "🐰", "🦁", "🐮", "🐙", "🐢", "👽", "🤖", "👻", "🤡", "👾"];
+const COLORES_HEX_BASE = ["#ff453a", "#ff9f0a", "#ffd60a", "#32d74b", "#66d4cf", "#0a84ff", "#bf5af2", "#ff375f", "#a2845e", "#86868b"];
+
 async function activarNotificacionesPush() {
     try {
         const permiso = await Notification.requestPermission();
@@ -48,6 +51,8 @@ async function activarNotificacionesPush() {
 let participantesGrupo = [];
 let creadorGrupo = "";
 let idPisoActual = "";
+let idPisoEnUnirse = "";
+let idPisoEditandoCreacion = null;
 let nombreUsuario = "";
 let nombresNuevos = [];
 let idGastoEditando = null;
@@ -86,7 +91,6 @@ function actualizarTextoBotonSonido() {
 window.playRetroSound = function(tipo = 'blip') {
     if (!sonidoActivo) return;
 
-    // Solo reproducimos sonido 8-bits al pagar un Bizum ('coin_bizum') o completar tarea ('powerup')
     if (tipo === 'coin_bizum' || tipo === 'powerup') {
         try {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -97,14 +101,14 @@ window.playRetroSound = function(tipo = 'blip') {
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
                 osc.type = 'square';
-                osc.frequency.setValueAtTime(987.77, now); // B5
-                osc.frequency.setValueAtTime(1318.51, now + 0.07); // E6
+                osc.frequency.setValueAtTime(987.77, now);
+                osc.frequency.setValueAtTime(1318.51, now + 0.07);
                 gain.gain.setValueAtTime(0.06, now);
                 gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
                 osc.connect(gain); gain.connect(audioCtx.destination);
                 osc.start(now); osc.stop(now + 0.29);
             } else if (tipo === 'powerup') {
-                const notas = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+                const notas = [523.25, 659.25, 783.99, 1046.50];
                 notas.forEach((freq, idx) => {
                     const osc = audioCtx.createOscillator();
                     const gain = audioCtx.createGain();
@@ -121,7 +125,6 @@ window.playRetroSound = function(tipo = 'blip') {
 
         if (navigator.vibrate) navigator.vibrate([25, 40, 25]);
     } else {
-        // Para el resto de acciones, leve vibración háptica sin sonido
         if (navigator.vibrate) {
             navigator.vibrate(tipo === 'hit' ? [20, 30, 20] : 15);
         }
@@ -154,7 +157,7 @@ function comprobarYMostrarNovedades(idPiso) {
             <div style="padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; font-size: 0.9em; line-height: 1.35; color: var(--text-main);">
                 <div style="background: #090a10; border: 1px solid #262b44; border-left: 3px solid var(--arcade-yellow); padding: 10px; border-radius: 4px;">
                     <div style="font-weight: 700; color: var(--arcade-yellow); margin-bottom: 3px;">🎨 Nuevo Diseño & Menú Pausa</div>
-                    <div style="color: var(--text-muted); font-size: 0.92em;">Interfaz arcade más limpia. Pulsa en tu nombre (arriba a la derecha) para cambiar tu avatar, color o copiar el enlace del piso.</div>
+                    <div style="color: var(--text-muted); font-size: 0.92em;">Interfaz arcade más limpia. Pulsa en tu nombre (arriba a la derecha) para cambiar tu avatar, color, gestionar inquilinos o copiar el enlace.</div>
                 </div>
 
                 <div style="background: #090a10; border: 1px solid #262b44; border-left: 3px solid var(--border-highlight); padding: 10px; border-radius: 4px;">
@@ -212,6 +215,18 @@ function getAvatar(nombre) {
 
 function getColor(nombre) {
     return window.coloresGrupo[nombre] || "#00e5ff";
+}
+
+function obtenerColorLibre() {
+    const usados = Object.values(window.coloresGrupo || {});
+    const libre = COLORES_HEX_BASE.find(c => !usados.includes(c));
+    return libre || COLORES_HEX_BASE[Math.floor(Math.random() * COLORES_HEX_BASE.length)];
+}
+
+function obtenerEmojiLibre() {
+    const usados = Object.values(window.avataresGrupo || {});
+    const libre = EMOJIS_BASE.find(e => !usados.includes(e));
+    return libre || EMOJIS_BASE[Math.floor(Math.random() * EMOJIS_BASE.length)];
 }
 
 function esUsuarioMaster() {
@@ -298,14 +313,16 @@ async function iniciarApp() {
 }
 
 function mostrarPantallaMisPisos() {
+    idPisoEditandoCreacion = null;
     pantallaMisPisos.classList.remove('hidden');
     pantallaCrear.classList.add('hidden');
+    pantallaUnirse.classList.add('hidden');
     document.getElementById('btnCancelarCrear').classList.remove('hidden');
     const div = document.getElementById('listaMisPisos');
     div.innerHTML = '';
     
     if (misPisos.length === 0) {
-        div.innerHTML = '<p style="color: var(--text-muted); text-align: center; margin-bottom: 20px;">No tienes ninguna partida guardada.</p>';
+        div.innerHTML = '<p style="color: var(--text-muted); text-align: center; margin-bottom: 20px;">No tienes ningún piso guardado.</p>';
         return;
     }
     
@@ -317,7 +334,7 @@ function mostrarPantallaMisPisos() {
         btn.className = 'btn-piso';
         btn.style.margin = "0";
         btn.style.flex = "1";
-        btn.innerHTML = `▶ ${piso.nombrePiso} <br><small style="font-weight:600; font-size:0.8em; color: rgba(0,0,0,0.75); display: block; margin-top: 2px;">🕹️ Jugar como ${piso.nombreUsuario}</small>`;
+        btn.innerHTML = `▶ ${piso.nombrePiso} <br><small style="font-weight:600; font-size:0.8em; color: rgba(0,0,0,0.75); display: block; margin-top: 2px;">🕹️ Perfil: ${piso.nombreUsuario}</small>`;
         
         btn.onclick = () => {
             window.playRetroSound('blip');
@@ -331,12 +348,12 @@ function mostrarPantallaMisPisos() {
         
         const btnEliminar = document.createElement('button');
         btnEliminar.innerHTML = "🗑️";
-        btnEliminar.title = "Borrar piso";
+        btnEliminar.title = "Borrar piso de mi lista";
         btnEliminar.style.cssText = "background: #1e2238; border: 2px solid #ff0055; width: 50px; border-radius: 4px; cursor: pointer; font-size: 1.1em; display: flex; align-items: center; justify-content: center; margin: 0; flex-shrink: 0; box-shadow: 0 4px 0 #000;";
         
         btnEliminar.onclick = async () => {
             window.playRetroSound('hit');
-            const seguro = await window.mostrarConfirmacion("Borrar Base", `¿Seguro que quieres borrar "${piso.nombrePiso}" de tu lista?`);
+            const seguro = await window.mostrarConfirmacion("Quitar Piso", `¿Seguro que quieres quitar "${piso.nombrePiso}" de tu lista de pisos guardados?`);
             if (seguro) {
                 misPisos.splice(index, 1);
                 localStorage.setItem('misPisos_v2', JSON.stringify(misPisos));
@@ -356,8 +373,56 @@ function mostrarPantallaMisPisos() {
     });
 }
 
-document.getElementById('btnIrCrearPiso').addEventListener('click', () => { window.playRetroSound('blip'); pantallaMisPisos.classList.add('hidden'); pantallaCrear.classList.remove('hidden'); });
-document.getElementById('btnCancelarCrear').addEventListener('click', () => { window.playRetroSound('blip'); pantallaCrear.classList.add('hidden'); pantallaMisPisos.classList.remove('hidden'); });
+document.getElementById('btnIrCrearPiso').addEventListener('click', () => { 
+    window.playRetroSound('blip'); 
+    idPisoEditandoCreacion = null;
+    document.getElementById('tituloPantallaCrear').innerText = '✨ NUEVO PISO';
+    document.getElementById('btnCrear').innerText = 'CREAR PISO';
+    document.getElementById('btnIrUnirsePiso2').classList.remove('hidden');
+    document.getElementById('nombrePiso').value = '';
+    nombresNuevos = [];
+    actualizarListaNuevosNombres();
+    pantallaMisPisos.classList.add('hidden'); 
+    pantallaCrear.classList.remove('hidden'); 
+});
+
+document.getElementById('btnCancelarCrear').addEventListener('click', () => { 
+    window.playRetroSound('blip'); 
+    if (idPisoEditandoCreacion) {
+        pantallaCrear.classList.add('hidden');
+        pantallaUnirse.classList.remove('hidden');
+        cargarPantallaUnirse(idPisoEditandoCreacion);
+    } else {
+        pantallaCrear.classList.add('hidden'); 
+        pantallaMisPisos.classList.remove('hidden'); 
+    }
+});
+
+// BOTÓN PARA VOLVER DESDE "ELIGE QUIÉN ERES" A EDITAR LOS NOMBRES DEL PISO RECIÉN CREADO
+document.getElementById('btnVolverEditarNombres').addEventListener('click', async () => {
+    window.playRetroSound('blip');
+    if (!idPisoEnUnirse) return;
+
+    try {
+        const docSnap = await getDoc(doc(db, "grupos", idPisoEnUnirse));
+        if (docSnap.exists()) {
+            const datos = docSnap.data();
+            idPisoEditandoCreacion = idPisoEnUnirse;
+            document.getElementById('tituloPantallaCrear').innerText = '✏️ EDITAR NOMBRES';
+            document.getElementById('nombrePiso').value = datos.nombre_piso || '';
+            nombresNuevos = [...(datos.participantes || [])];
+            actualizarListaNuevosNombres();
+            document.getElementById('btnCrear').innerText = 'GUARDAR Y CONTINUAR';
+            document.getElementById('btnIrUnirsePiso2').classList.add('hidden');
+            document.getElementById('btnCancelarCrear').classList.remove('hidden');
+
+            pantallaUnirse.classList.add('hidden');
+            pantallaCrear.classList.remove('hidden');
+        }
+    } catch (e) {
+        await window.mostrarAlerta("Error", "No se pudieron cargar los datos del piso.");
+    }
+});
 
 async function procesarEnlaceInvitacion() {
     window.playRetroSound('blip');
@@ -387,6 +452,7 @@ document.getElementById('btnAñadirNombre').addEventListener('click', () => {
         nombresNuevos.push(nombre); 
         actualizarListaNuevosNombres(); 
         input.value = ''; 
+        input.focus();
     }
 });
 
@@ -405,51 +471,98 @@ window.quitarNombre = function(index) {
 };
 
 document.getElementById('btnCrear').addEventListener('click', async () => {
-    const nombrePiso = document.getElementById('nombrePiso').value; 
+    // Si escribió un nombre en la caja pero olvidó pulsar '+', lo añadimos automáticamente
+    const inputPendiente = document.getElementById('inputNuevoNombre').value.trim();
+    if (inputPendiente && !nombresNuevos.includes(inputPendiente)) {
+        nombresNuevos.push(inputPendiente);
+        document.getElementById('inputNuevoNombre').value = '';
+        actualizarListaNuevosNombres();
+    }
+
+    const nombrePiso = document.getElementById('nombrePiso').value.trim(); 
     const boton = document.getElementById('btnCrear');
-    if (!nombrePiso || nombresNuevos.length === 0) return await window.mostrarAlerta("Datos incompletos", "Escribe el nombre del piso y añade al menos a un jugador.");
+    if (!nombrePiso || nombresNuevos.length === 0) {
+        return await window.mostrarAlerta("Datos incompletos", "Escribe el nombre del piso y añade al menos a un inquilino.");
+    }
     
-    boton.innerText = "CREANDO..."; boton.disabled = true;
-    const idUnico = 'piso-' + Math.random().toString(36).substring(2, 8);
-    const tablonInicial = { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" };
-    
-    const emojis = ["🦊", "🐼", "🐵", "🐶", "🐱", "🐯", "🐨", "🐸", "🐷", "🐻", "🐰", "🦁", "🐮", "🐙", "🐢", "👽", "🤖", "👻", "🤡", "👾"];
-    const hexColors = ["#ff453a", "#ff9f0a", "#ffd60a", "#32d74b", "#66d4cf", "#0a84ff", "#bf5af2", "#ff375f", "#a2845e", "#86868b"];
-    const shuffledEmojis = emojis.sort(() => 0.5 - Math.random());
-    const shuffledColors = hexColors.sort(() => 0.5 - Math.random());
-    
-    let avataresNuevos = {};
-    let coloresNuevos = {};
-    nombresNuevos.forEach((n, idx) => {
-        avataresNuevos[n] = shuffledEmojis[idx % shuffledEmojis.length];
-        coloresNuevos[n] = shuffledColors[idx % shuffledColors.length];
-    });
-    
+    boton.innerText = "GUARDANDO..."; boton.disabled = true;
+
     try {
-        await setDoc(doc(db, "grupos", idUnico), { 
-            id: idUnico, 
-            nombre_piso: nombrePiso, 
-            creador: nombresNuevos[0], 
-            participantes: nombresNuevos, 
-            avatares: avataresNuevos,
-            colores: coloresNuevos,
-            ajustes_faltas: {},
-            parche_notificado: PATCH_VERSION,
-            tablon: tablonInicial, 
-            fecha_creacion: new Date().toISOString() 
-        });
-        window.playRetroSound('blip');
-        pantallaCrear.classList.add('hidden'); pantallaUnirse.classList.remove('hidden');
-        document.getElementById('nombrePiso').value = ""; nombresNuevos = []; actualizarListaNuevosNombres();
-        await cargarPantallaUnirse(idUnico);
+        if (idPisoEditandoCreacion) {
+            // Estamos editando los nombres tras haber vuelto atrás desde pantallaUnirse
+            const docRef = doc(db, "grupos", idPisoEditandoCreacion);
+            const docSnap = await getDoc(docRef);
+            let avataresActuales = {};
+            let coloresActuales = {};
+            if (docSnap.exists()) {
+                avataresActuales = docSnap.data().avatares || {};
+                coloresActuales = docSnap.data().colores || {};
+            }
+
+            nombresNuevos.forEach((n, idx) => {
+                if (!avataresActuales[n]) avataresActuales[n] = EMOJIS_BASE[idx % EMOJIS_BASE.length];
+                if (!coloresActuales[n]) coloresActuales[n] = COLORES_HEX_BASE[idx % COLORES_HEX_BASE.length];
+            });
+
+            await updateDoc(docRef, {
+                nombre_piso: nombrePiso,
+                participantes: nombresNuevos,
+                avatares: avataresActuales,
+                colores: coloresActuales
+            });
+
+            const idDestino = idPisoEditandoCreacion;
+            idPisoEditandoCreacion = null;
+            window.playRetroSound('blip');
+            pantallaCrear.classList.add('hidden');
+            pantallaUnirse.classList.remove('hidden');
+            await cargarPantallaUnirse(idDestino);
+        } else {
+            // Creación de un piso nuevo
+            const idUnico = 'piso-' + Math.random().toString(36).substring(2, 8);
+            const tablonInicial = { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" };
+            
+            const shuffledEmojis = [...EMOJIS_BASE].sort(() => 0.5 - Math.random());
+            const shuffledColors = [...COLORES_HEX_BASE].sort(() => 0.5 - Math.random());
+            
+            let avataresNuevos = {};
+            let coloresNuevos = {};
+            nombresNuevos.forEach((n, idx) => {
+                avataresNuevos[n] = shuffledEmojis[idx % shuffledEmojis.length];
+                coloresNuevos[n] = shuffledColors[idx % shuffledColors.length];
+            });
+            
+            await setDoc(doc(db, "grupos", idUnico), { 
+                id: idUnico, 
+                nombre_piso: nombrePiso, 
+                creador: nombresNuevos[0], 
+                participantes: nombresNuevos, 
+                avatares: avataresNuevos,
+                colores: coloresNuevos,
+                ajustes_faltas: {},
+                parche_notificado: PATCH_VERSION,
+                tablon: tablonInicial, 
+                fecha_creacion: new Date().toISOString() 
+            });
+
+            window.playRetroSound('blip');
+            pantallaCrear.classList.add('hidden'); 
+            pantallaUnirse.classList.remove('hidden');
+            document.getElementById('nombrePiso').value = ""; 
+            nombresNuevos = []; 
+            actualizarListaNuevosNombres();
+            await cargarPantallaUnirse(idUnico);
+        }
     } catch (error) { 
         await window.mostrarAlerta("Error", "No se pudo guardar."); 
     } finally { 
-        boton.innerText = "CREAR PISO"; boton.disabled = false; 
+        boton.innerText = idPisoEditandoCreacion ? "GUARDAR Y CONTINUAR" : "CREAR PISO"; 
+        boton.disabled = false; 
     }
 });
 
 async function cargarPantallaUnirse(id) {
+    idPisoEnUnirse = id;
     try {
         const docSnap = await getDoc(doc(db, "grupos", id));
         if (docSnap.exists()) {
@@ -500,7 +613,7 @@ async function mostrarDashboard(nombre, id) {
             parcheLogRegistradoEnGrupo = (datos.parche_notificado === PATCH_VERSION);
             
             document.getElementById('tituloDashboard').innerText = datos.nombre_piso;
-            document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombre)} <span style="color: ${getColor(nombre)}; font-weight: bold;">${nombre}</span>`;
+            document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombreUsuario)} <span style="color: ${getColor(nombreUsuario)}; font-weight: bold;">${nombreUsuario}</span>`;
             
             const btnMaster = document.getElementById('btnAbrirMaster');
             if (btnMaster) {
@@ -510,6 +623,10 @@ async function mostrarDashboard(nombre, id) {
 
             cargarTablon(datos.tablon || { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" });
             recalcularStrikesTotales();
+            calcularBalancesYDeudas(ultimosGastos);
+            if (!document.getElementById('vistaInquilinos').classList.contains('hidden')) {
+                renderGestionInquilinos();
+            }
 
             comprobarYMostrarNovedades(id);
         }
@@ -544,6 +661,253 @@ document.getElementById('btnToggleSonido').addEventListener('click', (e) => {
     actualizarTextoBotonSonido();
     if (sonidoActivo) window.playRetroSound('blip');
 });
+
+// --- GESTIÓN DE INQUILINOS (AÑADIR, RENOMBRAR Y QUITAR) ---
+document.getElementById('btnGestionarInquilinos').addEventListener('click', () => {
+    menuPerfil.classList.add('hidden');
+    window.playRetroSound('blip');
+    renderGestionInquilinos();
+    window.scrollTo(0, 0);
+    document.body.style.overflow = 'hidden';
+    document.getElementById('vistaInquilinos').classList.remove('hidden');
+});
+
+document.getElementById('btnCerrarInquilinos').addEventListener('click', () => {
+    window.playRetroSound('blip');
+    document.body.style.overflow = 'auto';
+    document.getElementById('vistaInquilinos').classList.add('hidden');
+});
+
+function renderGestionInquilinos() {
+    const cont = document.getElementById('listaGestionInquilinos');
+    if (!cont) return;
+    cont.innerHTML = '';
+
+    participantesGrupo.forEach(p => {
+        const esYo = p === nombreUsuario;
+        const saldo = ultimosBalances[p] || 0;
+        const infoSaldo = Math.abs(saldo) > 0.01 ? `Saldo: ${saldo > 0 ? '+' : ''}${saldo.toFixed(2)}€` : 'Cuentas a 0.00€';
+
+        cont.innerHTML += `
+            <div class="manual-split-row">
+                <div style="min-width: 0; flex: 1; padding-right: 8px;">
+                    <span style="color: ${getColor(p)}; font-weight: 700; font-size: 1.05em;">
+                        ${getAvatar(p)} ${p} ${esYo ? '<small style="color:var(--arcade-yellow);">(Tú)</small>' : ''}
+                    </span>
+                    <small style="display: block; color: var(--text-muted); font-size: 0.78em;">${infoSaldo}</small>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <button type="button" class="btn-secundario btn-master-ctrl" title="Cambiar nombre" onclick="renombrarInquilinoPiso('${p.replace(/'/g, "\\'")}')">✏️</button>
+                    <button type="button" class="btn-master-ctrl" style="background: var(--arcade-red); color: #fff;" title="Quitar del piso" onclick="eliminarInquilinoPiso('${p.replace(/'/g, "\\'")}')">🗑️</button>
+                </div>
+            </div>`;
+    });
+}
+
+document.getElementById('btnGuardarNuevoInquilino').addEventListener('click', async () => {
+    const input = document.getElementById('inputAñadirInquilinoPanel');
+    const nuevo = input.value.trim();
+    if (!nuevo) return;
+
+    if (participantesGrupo.some(p => p.toLowerCase() === nuevo.toLowerCase())) {
+        return await window.mostrarAlerta("Nombre duplicado", `Ya existe un inquilino llamado "${nuevo}" en este piso.`);
+    }
+
+    const nuevosParticipantes = [...participantesGrupo, nuevo];
+    const emojiLibre = obtenerEmojiLibre();
+    const colorLibre = obtenerColorLibre();
+
+    try {
+        await updateDoc(doc(db, "grupos", idPisoActual), {
+            participantes: nuevosParticipantes,
+            [`avatares.${nuevo}`]: emojiLibre,
+            [`colores.${nuevo}`]: colorLibre
+        });
+        input.value = '';
+        window.playRetroSound('blip');
+        registrarActividad(`**${nombreUsuario}** añadió a **${nuevo}** como inquilino del piso.`, "👥");
+    } catch (e) {
+        await window.mostrarAlerta("Error", "No se pudo añadir al inquilino.");
+    }
+});
+
+window.renombrarInquilinoPiso = async function(nombreViejo) {
+    const nuevoNombreRaw = await window.mostrarPrompt("Cambiar Nombre", `Escribe el nuevo nombre para "${nombreViejo}":`, nombreViejo);
+    if (!nuevoNombreRaw) return;
+    const nuevoNombre = nuevoNombreRaw.trim();
+    if (!nuevoNombre || nuevoNombre === nombreViejo) return;
+
+    if (participantesGrupo.some(p => p.toLowerCase() === nuevoNombre.toLowerCase() && p !== nombreViejo)) {
+        return await window.mostrarAlerta("Nombre en uso", `Ya hay otra persona llamada "${nuevoNombre}" en el piso.`);
+    }
+
+    try {
+        const batch = writeBatch(db);
+        const grupoRef = doc(db, "grupos", idPisoActual);
+
+        // 1. Actualizar participantes, avatares, colores y faltas en el documento del grupo
+        const nuevosParticipantes = participantesGrupo.map(p => p === nombreViejo ? nuevoNombre : p);
+        const nuevosAvatares = { ...window.avataresGrupo };
+        if (nuevosAvatares[nombreViejo]) {
+            nuevosAvatares[nuevoNombre] = nuevosAvatares[nombreViejo];
+            delete nuevosAvatares[nombreViejo];
+        }
+        const nuevosColores = { ...window.coloresGrupo };
+        if (nuevosColores[nombreViejo]) {
+            nuevosColores[nuevoNombre] = nuevosColores[nombreViejo];
+            delete nuevosColores[nombreViejo];
+        }
+        const nuevosAjustesFaltas = { ...window.ajustesFaltasGrupo };
+        if (nuevosAjustesFaltas[nombreViejo] !== undefined) {
+            nuevosAjustesFaltas[nuevoNombre] = nuevosAjustesFaltas[nombreViejo];
+            delete nuevosAjustesFaltas[nombreViejo];
+        }
+
+        const updateGrupoObj = {
+            participantes: nuevosParticipantes,
+            avatares: nuevosAvatares,
+            colores: nuevosColores,
+            ajustes_faltas: nuevosAjustesFaltas
+        };
+        if (creadorGrupo === nombreViejo) updateGrupoObj.creador = nuevoNombre;
+        batch.update(grupoRef, updateGrupoObj);
+
+        // 2. Actualizar todos los gastos donde aparezca el nombre antiguo
+        ultimosGastos.forEach(g => {
+            let cambiado = false;
+            let nuevoPagador = g.pagador;
+            let nuevoReceptor = g.receptor;
+            let nuevoConcepto = g.concepto;
+
+            if (g.pagador === nombreViejo) { nuevoPagador = nuevoNombre; cambiado = true; }
+            if (g.receptor === nombreViejo) { nuevoReceptor = nuevoNombre; cambiado = true; }
+            if (g.concepto === `💸 Bizum de ${nombreViejo}`) { nuevoConcepto = `💸 Bizum de ${nuevoNombre}`; cambiado = true; }
+
+            let nuevosInv = (g.involucrados || []).map(inv => {
+                if (typeof inv === 'string') {
+                    if (inv === nombreViejo) { cambiado = true; return nuevoNombre; }
+                    return inv;
+                } else if (inv && inv.nombre === nombreViejo) {
+                    cambiado = true;
+                    return { ...inv, nombre: nuevoNombre };
+                }
+                return inv;
+            });
+
+            if (cambiado) {
+                const gastoRef = doc(db, "grupos", idPisoActual, "gastos", g.id);
+                const objGasto = { pagador: nuevoPagador, involucrados: nuevosInv, concepto: nuevoConcepto };
+                if (nuevoReceptor !== undefined) objGasto.receptor = nuevoReceptor;
+                batch.update(gastoRef, objGasto);
+            }
+        });
+
+        // 3. Actualizar todas las zonas de limpieza (rotación, semanas hechas y votos VAR)
+        zonasLimpiezaCache.forEach(z => {
+            let cambiado = false;
+            let nuevosResp = (z.responsables || []).map(r => {
+                if (r === nombreViejo) { cambiado = true; return nuevoNombre; }
+                return r;
+            });
+
+            let nuevasHechas = { ...(z.semanas_hechas || {}) };
+            Object.keys(nuevasHechas).forEach(ts => {
+                if (nuevasHechas[ts] === nombreViejo) { nuevasHechas[ts] = nuevoNombre; cambiado = true; }
+                else if (nuevasHechas[ts] === `${nombreViejo}_Tarde`) { nuevasHechas[ts] = `${nuevoNombre}_Tarde`; cambiado = true; }
+            });
+
+            let nuevosVar = { ...(z.var_votos || {}) };
+            Object.keys(nuevosVar).forEach(ts => {
+                if (Array.isArray(nuevosVar[ts]) && nuevosVar[ts].includes(nombreViejo)) {
+                    nuevosVar[ts] = nuevosVar[ts].map(v => v === nombreViejo ? nuevoNombre : v);
+                    cambiado = true;
+                }
+            });
+
+            if (cambiado) {
+                const zonaRef = doc(db, "grupos", idPisoActual, "zonas_limpieza", z.id);
+                batch.update(zonaRef, {
+                    responsables: nuevosResp,
+                    semanas_hechas: nuevasHechas,
+                    var_votos: nuevosVar
+                });
+            }
+        });
+
+        await batch.commit();
+
+        // Si el usuario se ha renombrado a sí mismo, actualizamos su sesión local
+        if (nombreUsuario === nombreViejo) {
+            nombreUsuario = nuevoNombre;
+            let pLocal = misPisos.find(p => p.id === idPisoActual);
+            if (pLocal) {
+                pLocal.nombreUsuario = nuevoNombre;
+                localStorage.setItem('misPisos_v2', JSON.stringify(misPisos));
+            }
+            document.getElementById('nombreUsuarioActual').innerHTML = `${getAvatar(nombreUsuario)} <span style="color: ${getColor(nombreUsuario)}; font-weight: bold;">${nombreUsuario}</span>`;
+        }
+
+        window.playRetroSound('blip');
+        registrarActividad(`**${nombreUsuario}** cambió el nombre de "${nombreViejo}" a **${nuevoNombre}**.`, "✏️");
+    } catch (e) {
+        console.error(e);
+        await window.mostrarAlerta("Error", "No se pudo renombrar al inquilino.");
+    }
+};
+
+window.eliminarInquilinoPiso = async function(nombreBorrar) {
+    if (participantesGrupo.length <= 1) {
+        return await window.mostrarAlerta("Acción no permitida", "No puedes dejar el piso sin ningún inquilino.");
+    }
+
+    const saldo = ultimosBalances[nombreBorrar] || 0;
+    const avisoSaldo = Math.abs(saldo) > 0.02 
+        ? `⚠️ ATENCIÓN: ${nombreBorrar} tiene un saldo pendiente de ${saldo.toFixed(2)}€.\n\n` 
+        : '';
+
+    const seguro = await window.mostrarConfirmacion(
+        "Quitar Inquilino",
+        `${avisoSaldo}¿Seguro que quieres quitar a "${nombreBorrar}" del piso?`
+    );
+    if (!seguro) return;
+
+    try {
+        const batch = writeBatch(db);
+        const nuevosParticipantes = participantesGrupo.filter(p => p !== nombreBorrar);
+
+        batch.update(doc(db, "grupos", idPisoActual), {
+            participantes: nuevosParticipantes
+        });
+
+        // Lo sacamos de las rotaciones de limpieza (siempre que quede al menos 1 responsable)
+        zonasLimpiezaCache.forEach(z => {
+            if ((z.responsables || []).includes(nombreBorrar)) {
+                const filtrados = z.responsables.filter(r => r !== nombreBorrar);
+                if (filtrados.length > 0) {
+                    batch.update(doc(db, "grupos", idPisoActual, "zonas_limpieza", z.id), {
+                        responsables: filtrados
+                    });
+                }
+            }
+        });
+
+        await batch.commit();
+        window.playRetroSound('hit');
+        registrarActividad(`**${nombreUsuario}** quitó a "${nombreBorrar}" de la lista de inquilinos.`, "👋");
+
+        // Si el usuario se ha borrado a sí mismo, lo llevamos a elegir quién es
+        if (nombreBorrar === nombreUsuario) {
+            document.body.style.overflow = 'auto';
+            document.getElementById('vistaInquilinos').classList.add('hidden');
+            document.getElementById('pantallaDashboard').classList.add('hidden');
+            document.body.classList.add('pantalla-centrada');
+            document.getElementById('pantallaUnirse').classList.remove('hidden');
+            await cargarPantallaUnirse(idPisoActual);
+        }
+    } catch (e) {
+        await window.mostrarAlerta("Error", "No se pudo eliminar al inquilino.");
+    }
+};
 
 // --- LÓGICA DEL PANEL MAESTRO (EXCLUSIVO ADMIN) ---
 document.getElementById('btnAbrirMaster').addEventListener('click', async () => {
@@ -651,7 +1015,7 @@ function renderPanelMaestro() {
 
 document.getElementById('btnCambiarUsuarioMenu').addEventListener('click', async () => {
     menuPerfil.classList.add('hidden');
-    const seguro = await window.mostrarConfirmacion("Cambiar Jugador", "¿Te has equivocado de personaje? Volverás a la pantalla de selección.");
+    const seguro = await window.mostrarConfirmacion("Cambiar quién soy", "¿Entraste con el nombre de otro compañero por error? Volverás a la pantalla para elegir quién eres.");
     if (seguro) {
         if(unsubGrupo) unsubGrupo(); if(unsubGastos) unsubGastos(); if(unsubCompra) unsubCompra(); if(unsubLimpieza) unsubLimpieza(); if(unsubHistorial) unsubHistorial();
         localStorage.removeItem('ultimoPisoActivo');
@@ -664,7 +1028,7 @@ document.getElementById('btnCambiarUsuarioMenu').addEventListener('click', async
 
 document.getElementById('btnCambiarAvatar').addEventListener('click', async () => {
     menuPerfil.classList.add('hidden');
-    const nuevoEmoji = await window.mostrarPrompt("Cambiar Avatar", "Escribe o pega el emoji para tu personaje (Ej: 👽, 🦊, 👾):");
+    const nuevoEmoji = await window.mostrarPrompt("Cambiar mi Avatar", "Escribe o pega el emoji para tu perfil (Ej: 👽, 🦊, 👾):");
     
     if (nuevoEmoji && nuevoEmoji.trim().length > 0) {
         const emojiFinal = nuevoEmoji.trim().substring(0, 4); 
@@ -717,7 +1081,7 @@ document.getElementById('btnCambiarColor').addEventListener('click', async () =>
         mapaOpciones[numeroOpcion] = c.hex;
     });
 
-    const seleccion = await window.mostrarPrompt("Elegir Color", msg);
+    const seleccion = await window.mostrarPrompt("Cambiar mi Color", msg);
     
     let nuevoColor = mapaOpciones[seleccion ? seleccion.trim() : ""];
     if (nuevoColor) {
@@ -737,7 +1101,7 @@ document.getElementById('btnCambiarColor').addEventListener('click', async () =>
 document.getElementById('btnEditarNombrePiso').addEventListener('click', async () => {
     menuPerfil.classList.add('hidden');
     const n = document.getElementById('tituloDashboard').innerText;
-    const nn = await window.mostrarPrompt("Renombrar Piso", "Escribe un nuevo nombre para la base:", n);
+    const nn = await window.mostrarPrompt("Renombrar Piso", "Escribe un nuevo nombre para el piso:", n);
     if (nn && nn.trim() !== "" && nn.trim() !== n) {
         await updateDoc(doc(db, "grupos", idPisoActual), { nombre_piso: nn.trim() });
         document.getElementById('tituloDashboard').innerText = nn.trim();
@@ -1253,7 +1617,7 @@ function calcularBalancesYDeudas(gastos) {
     let htmlBalances = ''; let deudores = []; let acreedores = [];
     for (let persona in ultimosBalances) {
         let saldo = ultimosBalances[persona];
-        let colorSaldo = saldo >= -0.01 && saldo <= 0.01 ? '#f0f4ff' : (saldo > 0 ? '#00ff66' : '#ff0055');
+        let colorSaldo = saldo >= -0.01 && saldo <= 0.01 ? '#f0f4ff' : (saldo > 0 ? '#32d74b' : '#ff0055');
         let signo = saldo > 0.01 ? '+' : '';
         htmlBalances += `
             <div class="balance-item">
@@ -1268,7 +1632,7 @@ function calcularBalancesYDeudas(gastos) {
     
     let htmlDeudas = ''; let i = 0; let j = 0;
     if (deudores.length === 0) { 
-        htmlDeudas = '<div style="background: rgba(46, 196, 182, 0.1); border: 1px solid #2ec4b6; border-radius: 4px; padding: 7px; text-align: center; color: #2ec4b6; font-weight: 700; font-size: 0.85em;">✅ CUENTAS SALDADAS</div>'; 
+        htmlDeudas = '<div style="background: rgba(50, 215, 75, 0.1); border: 1px solid #32d74b; border-radius: 4px; padding: 7px; text-align: center; color: #32d74b; font-weight: 700; font-size: 0.85em;">✅ CUENTAS SALDADAS</div>'; 
     } else {
         while (i < deudores.length && j < acreedores.length) {
             let deudor = deudores[i]; let acreedor = acreedores[j]; let transfer = Math.min(deudor.cantidad, acreedor.cantidad);
@@ -1594,6 +1958,7 @@ function cargarListaLimpieza() {
 function calcularAsignacionesParaSemana(fechaLunes) {
     let asignaciones = []; let asignados = []; 
     zonasLimpiezaCache.forEach((zona, i) => {
+        if (!zona.responsables || zona.responsables.length === 0) return;
         const freq = zona.frecuencia || 1;
         let sem = Math.floor((fechaLunes.getTime() - new Date(zona.fecha_base).getTime()) / 604800000); 
         if (sem < 0 || sem % freq !== 0) return;
