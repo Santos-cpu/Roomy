@@ -71,6 +71,7 @@ let ultimosBalances = {};
 let strikesAutomaticos = {};
 let ultimosStrikes = {};
 let parcheLogRegistradoEnGrupo = false;
+let mostrarTodosGastos = false;
 
 let chartMisGastosObj = null;
 let chartPisoGastosObj = null;
@@ -471,7 +472,6 @@ window.quitarNombre = function(index) {
 };
 
 document.getElementById('btnCrear').addEventListener('click', async () => {
-    // Si escribió un nombre en la caja pero olvidó pulsar '+', lo añadimos automáticamente
     const inputPendiente = document.getElementById('inputNuevoNombre').value.trim();
     if (inputPendiente && !nombresNuevos.includes(inputPendiente)) {
         nombresNuevos.push(inputPendiente);
@@ -489,7 +489,6 @@ document.getElementById('btnCrear').addEventListener('click', async () => {
 
     try {
         if (idPisoEditandoCreacion) {
-            // Estamos editando los nombres tras haber vuelto atrás desde pantallaUnirse
             const docRef = doc(db, "grupos", idPisoEditandoCreacion);
             const docSnap = await getDoc(docRef);
             let avataresActuales = {};
@@ -518,7 +517,6 @@ document.getElementById('btnCrear').addEventListener('click', async () => {
             pantallaUnirse.classList.remove('hidden');
             await cargarPantallaUnirse(idDestino);
         } else {
-            // Creación de un piso nuevo
             const idUnico = 'piso-' + Math.random().toString(36).substring(2, 8);
             const tablonInicial = { wifi_nombre: "", wifi_pass: "", iban: "", notas: "" };
             
@@ -745,7 +743,6 @@ window.renombrarInquilinoPiso = async function(nombreViejo) {
         const batch = writeBatch(db);
         const grupoRef = doc(db, "grupos", idPisoActual);
 
-        // 1. Actualizar participantes, avatares, colores y faltas en el documento del grupo
         const nuevosParticipantes = participantesGrupo.map(p => p === nombreViejo ? nuevoNombre : p);
         const nuevosAvatares = { ...window.avataresGrupo };
         if (nuevosAvatares[nombreViejo]) {
@@ -772,7 +769,6 @@ window.renombrarInquilinoPiso = async function(nombreViejo) {
         if (creadorGrupo === nombreViejo) updateGrupoObj.creador = nuevoNombre;
         batch.update(grupoRef, updateGrupoObj);
 
-        // 2. Actualizar todos los gastos donde aparezca el nombre antiguo
         ultimosGastos.forEach(g => {
             let cambiado = false;
             let nuevoPagador = g.pagador;
@@ -802,7 +798,6 @@ window.renombrarInquilinoPiso = async function(nombreViejo) {
             }
         });
 
-        // 3. Actualizar todas las zonas de limpieza (rotación, semanas hechas y votos VAR)
         zonasLimpiezaCache.forEach(z => {
             let cambiado = false;
             let nuevosResp = (z.responsables || []).map(r => {
@@ -836,7 +831,6 @@ window.renombrarInquilinoPiso = async function(nombreViejo) {
 
         await batch.commit();
 
-        // Si el usuario se ha renombrado a sí mismo, actualizamos su sesión local
         if (nombreUsuario === nombreViejo) {
             nombreUsuario = nuevoNombre;
             let pLocal = misPisos.find(p => p.id === idPisoActual);
@@ -879,7 +873,6 @@ window.eliminarInquilinoPiso = async function(nombreBorrar) {
             participantes: nuevosParticipantes
         });
 
-        // Lo sacamos de las rotaciones de limpieza (siempre que quede al menos 1 responsable)
         zonasLimpiezaCache.forEach(z => {
             if ((z.responsables || []).includes(nombreBorrar)) {
                 const filtrados = z.responsables.filter(r => r !== nombreBorrar);
@@ -895,7 +888,6 @@ window.eliminarInquilinoPiso = async function(nombreBorrar) {
         window.playRetroSound('hit');
         registrarActividad(`**${nombreUsuario}** quitó a "${nombreBorrar}" de la lista de inquilinos.`, "👋");
 
-        // Si el usuario se ha borrado a sí mismo, lo llevamos a elegir quién es
         if (nombreBorrar === nombreUsuario) {
             document.body.style.overflow = 'auto';
             document.getElementById('vistaInquilinos').classList.add('hidden');
@@ -1251,7 +1243,7 @@ function actualizarGraficos() {
             labels: ['🏠 Piso', '💡 Facturas', '🍻 Ocio'],
             datasets: [{
                 data: data,
-                backgroundColor: ['#32d74b', '#ff9f0a', '#0a84ff'],
+                backgroundColor: ['#0a84ff', '#ff9f0a', '#bf5af2'],
                 borderColor: '#151828',
                 borderWidth: 3,
                 hoverOffset: 4
@@ -1268,7 +1260,7 @@ function actualizarGraficos() {
     if (ctxPiso && window.Chart) chartPisoGastosObj = new Chart(ctxPiso, configParams(pisoData));
 }
 
-// --- MÓDULO GASTOS (MODO ENFOQUE + HISTORIAL LIMPIO) ---
+// --- MÓDULO GASTOS (MODO ENFOQUE + HISTORIAL LIMPIO + PAGINACIÓN DE 6 ELEMENTOS) ---
 window.usarPlantillaGasto = function(concepto, categoria) {
     window.playRetroSound('blip');
     document.getElementById('conceptoGasto').value = concepto;
@@ -1449,6 +1441,13 @@ document.getElementById('btnGuardarGasto').addEventListener('click', async () =>
 
 document.getElementById('filtroMesGastos').addEventListener('change', () => {
     window.playRetroSound('blip');
+    mostrarTodosGastos = false;
+    renderListaGastosFiltrada();
+});
+
+document.getElementById('btnToggleMasGastos').addEventListener('click', () => {
+    window.playRetroSound('blip');
+    mostrarTodosGastos = !mostrarTodosGastos;
     renderListaGastosFiltrada();
 });
 
@@ -1515,6 +1514,7 @@ function actualizarOpcionesFiltroMes() {
 
 function renderListaGastosFiltrada() {
     const listaHtml = document.getElementById('listaGastos');
+    const btnMas = document.getElementById('btnToggleMasGastos');
     const filtro = document.getElementById('filtroMesGastos') ? document.getElementById('filtroMesGastos').value : 'todos';
 
     const gastosFiltrados = ultimosGastos.filter(g => {
@@ -1527,11 +1527,26 @@ function renderListaGastosFiltrada() {
 
     if (gastosFiltrados.length === 0) {
         listaHtml.innerHTML = '<p style="color:var(--text-muted); text-align:center; margin: 12px 0;">Sin movimientos registrados.</p>';
+        if (btnMas) btnMas.classList.add('hidden');
         return;
     }
 
+    const LIMITE_VISIBLE = 6;
+    const gastosAMostrar = mostrarTodosGastos ? gastosFiltrados : gastosFiltrados.slice(0, LIMITE_VISIBLE);
+
+    if (btnMas) {
+        if (gastosFiltrados.length > LIMITE_VISIBLE) {
+            btnMas.classList.remove('hidden');
+            btnMas.innerText = mostrarTodosGastos 
+                ? `▲ VER MENOS` 
+                : `▼ VER TODOS (${gastosFiltrados.length})`;
+        } else {
+            btnMas.classList.add('hidden');
+        }
+    }
+
     listaHtml.innerHTML = '';
-    gastosFiltrados.forEach((gasto) => {
+    gastosAMostrar.forEach((gasto) => {
         const divGasto = document.createElement('div');
         divGasto.className = 'item-lista gasto-row';
         divGasto.onclick = () => window.abrirEditarGastoPorId(gasto.id);
@@ -1545,8 +1560,9 @@ function renderListaGastosFiltrada() {
                 receptor = typeof gasto.involucrados[0] === 'object' ? gasto.involucrados[0].nombre : gasto.involucrados[0];
             }
             
+            // Borde e importe de los Bizums en verde vivo (#32d74b)
             divGasto.innerHTML = `
-                <div class="gasto-cat-icon" style="border-color: var(--arcade-green);">💸</div>
+                <div class="gasto-cat-icon" style="border-color: #32d74b;">💸</div>
                 <div class="item-info">
                     <span class="item-titulo">Pago por Bizum</span>
                     <span class="item-detalle">
@@ -1556,15 +1572,19 @@ function renderListaGastosFiltrada() {
                         • ${fechaCorta}
                     </span>
                 </div>
-                <span class="gasto-importe" style="color: var(--arcade-green);">${gasto.importe.toFixed(2)}€</span>`;
+                <span class="gasto-importe" style="color: #32d74b;">${gasto.importe.toFixed(2)}€</span>`;
         } else {
             const esManual = typeof gasto.involucrados[0] === 'object';
             const esTodos = !esManual && gasto.involucrados.length === participantesGrupo.length;
             const infoReparto = esManual ? ' · Manual' : (!esTodos ? ` · ${gasto.involucrados.length}p` : '');
-            const iconoCat = gasto.categoria ? gasto.categoria.split(' ')[0] : '🏠';
+            
+            // Colores por categoría: Piso en azul (#0a84ff), Facturas en naranja (#ff9f0a), Ocio en morado (#bf5af2)
+            const catStr = gasto.categoria || '🏠 Piso';
+            const iconoCat = catStr.split(' ')[0];
+            const colorBordeCat = catStr.includes('Facturas') ? '#ff9f0a' : (catStr.includes('Ocio') ? '#bf5af2' : '#0a84ff');
             
             divGasto.innerHTML = `
-                <div class="gasto-cat-icon">${iconoCat}</div>
+                <div class="gasto-cat-icon" style="border-color: ${colorBordeCat};">${iconoCat}</div>
                 <div class="item-info">
                     <span class="item-titulo">${gasto.concepto}</span>
                     <span class="item-detalle">
@@ -1588,6 +1608,8 @@ function cargarListaGastos() {
         if (querySnapshot.empty) {
             actualizarOpcionesFiltroMes();
             listaHtml.innerHTML = '<p style="color:var(--text-muted); text-align:center; margin: 12px 0;">Sin movimientos registrados.</p>';
+            const btnMas = document.getElementById('btnToggleMasGastos');
+            if (btnMas) btnMas.classList.add('hidden');
             document.getElementById('listaBalances').innerHTML = '<p style="color:var(--text-muted); grid-column: span 2; text-align:center; margin: 6px 0;">Sin actividad</p>';
             document.getElementById('listaDeudas').innerHTML = ''; 
             generarRankingGlobal(); 
