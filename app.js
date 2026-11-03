@@ -200,7 +200,7 @@ function comprobarYMostrarNovedades(idPiso) {
 
                 <div style="background: #090a10; border: 1px solid #262b44; border-left: 3px solid var(--arcade-red); padding: 10px; border-radius: 4px;">
                     <div style="font-weight: 700; color: var(--arcade-red); margin-bottom: 3px;">🚩 Sistema VAR e Intercambios</div>
-                    <div style="color: var(--text-muted); font-size: 0.92em;">Impugna limpiezas falsas con <b>🚩 VAR</b> (2 votos) o solicita intercambiar semanas de limpieza con tus compañeros desde el botón rojo.</div>
+                    <div style="color: var(--text-muted); font-size: 0.92em;">Impugna limpiezas falsas con <b>🚩 VAR</b> (2 votos) o solicita intercambiar semanas de limpieza con tus compañeros.</div>
                 </div>
 
                 <div style="background: #090a10; border: 1px solid #262b44; border-left: 3px solid var(--arcade-green); padding: 10px; border-radius: 4px;">
@@ -1285,7 +1285,6 @@ document.getElementById('btnMasterGuardarTurno').addEventListener('click', async
                 delete nuevasPrios[tsKey];
             }
         });
-        // Si había una permuta aislada en esa misma semana para esta zona, la limpiamos para que mande el nuevo turno maestro
         delete nuevasPermutas[tsSemana];
 
         nuevasAnclas[tsSemana] = nuevoResp;
@@ -1528,7 +1527,6 @@ document.getElementById('btnAbrirHistorial').addEventListener('click', () => {
     document.getElementById('vistaHistorial').classList.remove('hidden');
     if (idPisoActual) localStorage.setItem(`visto_hist_${idPisoActual}`, String(Date.now()));
 
-    // Si el usuario tiene solicitudes pendientes para él, abrimos directamente la pestaña de Solicitudes
     const misPendientes = solicitudesIntercambioCache.filter(s => s.destinatario === nombreUsuario && s.estado === 'pendiente').length;
     if (misPendientes > 0) {
         activarSubtabCampana('solicitudes');
@@ -2202,7 +2200,7 @@ document.getElementById('btnComprarSeleccionados').addEventListener('click', asy
     }, 120);
 });
 
-// --- MÓDULO LIMPIEZA, ROTACIÓN EQUITATIVA, CALENDARIO VISUAL & INTERCAMBIOS AISLADOS ---
+// --- MÓDULO LIMPIEZA, ROTACIÓN EQUITATIVA, CALENDARIO VISUAL CENTRADO & INTERCAMBIOS AISLADOS ---
 function resetFormZona() {
     idZonaEditando = null; document.getElementById('tituloFormZona').innerText = 'NUEVA ZONA';
     document.getElementById('nombreZona').value = ''; document.getElementById('frecuenciaZona').value = '1';
@@ -2278,7 +2276,6 @@ function obtenerPermutaAisladaSemana(zona, tsLunes) {
     return undefined;
 }
 
-// Determina si una tarea es común para todos los integrantes del piso (ej. Cocina y Salón)
 function esZonaComunParaTodos(zona) {
     if (!zona || !Array.isArray(zona.responsables) || zona.responsables.length === 0) return false;
     if (participantesGrupo.length > 0) {
@@ -2289,7 +2286,6 @@ function esZonaComunParaTodos(zona) {
     return maxResp > 1 && zona.responsables.length === maxResp;
 }
 
-// Devuelve la lista de responsables de una zona común en orden canónico unificado para garantizar rotación equitativa 100% (Latín Square)
 function obtenerListaCanonicaComun(zona) {
     if (participantesGrupo.length > 0) {
         const filtrados = participantesGrupo.filter(p => zona.responsables.includes(p));
@@ -2351,7 +2347,6 @@ function calcularAsignacionesParaSemana(fechaLunes, ignorarPermutasAisladas = fa
         } else {
             if (semDesdeBase % freq !== 0) return;
             const periodos = Math.floor(semDesdeBase / freq);
-            // En zonas comunes usamos listaResp canónica + miIdxComun: todos rotan exactamente las mismas veces y jamás coinciden en la misma semana
             idIdeal = (periodos + (esComun ? miIdxComun : 0)) % listaResp.length;
         }
 
@@ -2378,7 +2373,6 @@ function calcularAsignacionesParaSemana(fechaLunes, ignorarPermutasAisladas = fa
         }
     });
 
-    // Si hay anclas manuales del Panel Maestro en zonas comunes, la zona con el ancla más reciente marca el paso canónico y las demás se desfasan equitativamente sin chocar
     zonasComunesActivas.sort((a, b) => {
         const aExacta = a.ancla && a.ancla.tsAncla === tsLunes ? 1 : 0;
         const bExacta = b.ancla && b.ancla.tsAncla === tsLunes ? 1 : 0;
@@ -2398,7 +2392,6 @@ function calcularAsignacionesParaSemana(fechaLunes, ignorarPermutasAisladas = fa
     let asignadosEnComunes = [];
     zonasComunesActivas.forEach((item, idxOrden) => {
         const { zona, listaResp, freq, idIdeal } = item;
-        // Si la primera zona común tiene un ancla maestra y esta segunda no, desfasamos respecto al índice de la primera para mantener rotación circular equitativa
         let startIdx = idIdeal;
         if (idxOrden > 0 && zonasComunesActivas[0].ancla && !item.ancla) {
             startIdx = (zonasComunesActivas[0].idIdeal + idxOrden) % listaResp.length;
@@ -2424,7 +2417,6 @@ function calcularAsignacionesParaSemana(fechaLunes, ignorarPermutasAisladas = fa
         };
     });
 
-    // Aplicamos al final los intercambios aislados (permutas_semana) de esa semana concreta sin alterar el orden de ninguna otra semana ni tarea
     let resultado = [];
     zonasLimpiezaCache.forEach(z => {
         if (asignacionesMap[z.id]) {
@@ -2716,13 +2708,13 @@ function renderVistaSemanaActual() {
     list.innerHTML = html;
 }
 
-// Genera el HTML de una cuadrícula mensual real (L a D) con píldoras de colores de los usuarios por semana
+// Genera el HTML del calendario visual mensual (L a D) con todas las tareas de cada semana igualadas en una fila y centradas
 function construirHTMLCalendarioVisual(anio, mes, opciones = {}) {
     const {
         interactivo = false,
         tsSemanaBloqueada = null,
         tsSemanaSeleccionada = null,
-        resaltesIntercambio = null // Mapa { [tsLunes]: [{ texto, color, bordeEspecial }] }
+        resaltesIntercambio = null
     } = opciones;
 
     let sem = [];
@@ -2767,20 +2759,22 @@ function construirHTMLCalendarioVisual(anio, mes, opciones = {}) {
         if (resaltesIntercambio && resaltesIntercambio[tsLunes]) {
             resaltesIntercambio[tsLunes].forEach(r => {
                 pillsHtml += `
-                    <span class="cal-task-pill" style="border-left-color: ${r.color}; border: 1px solid ${r.color}; background: rgba(255, 190, 11, 0.14);">
-                        ${r.texto}
-                    </span>`;
+                    <div class="cal-task-pill" style="border-top-color: ${r.color}; border-color: ${r.color}; background: rgba(255, 190, 11, 0.14);">
+                        <span class="cal-pill-zone">🔄 ${r.zona}</span>
+                        <span class="cal-pill-user" style="color:${r.color};">${r.usuario}</span>
+                    </div>`;
             });
         } else if (asigs.length === 0) {
-            pillsHtml += `<span style="font-size:0.7em; color:var(--text-muted);">Sin tareas</span>`;
+            pillsHtml += `<div class="cal-task-pill" style="border-top-color:#394168;"><span class="cal-pill-zone" style="color:var(--text-muted);">Sin tareas</span></div>`;
         } else {
             asigs.forEach(a => {
                 const cUser = getColor(a.leTocaA);
-                const iconoSwap = a.esPermuta ? '🔄' : '';
+                const iconoSwap = a.esPermuta ? ' 🔄' : '';
                 pillsHtml += `
-                    <span class="cal-task-pill" style="border-left-color: ${cUser};">
-                        <span style="color:${cUser};">${getAvatar(a.leTocaA)} ${a.leTocaA}</span>: ${a.nombre_zona} ${iconoSwap}
-                    </span>`;
+                    <div class="cal-task-pill" style="border-top-color: ${cUser};">
+                        <span class="cal-pill-zone">${a.nombre_zona}${iconoSwap}</span>
+                        <span class="cal-pill-user" style="color:${cUser};">${getAvatar(a.leTocaA)} ${a.leTocaA}</span>
+                    </div>`;
             });
         }
         pillsHtml += '</div>';
@@ -2792,9 +2786,8 @@ function construirHTMLCalendarioVisual(anio, mes, opciones = {}) {
             </div>`;
     });
 
-    // Leyenda compacta de colores de los usuarios debajo del calendario
     if (!resaltesIntercambio && participantesGrupo.length > 0) {
-        html += `<div style="display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:8px; padding-top:6px; border-top:1px dashed #262b44; font-size:0.75em;">`;
+        html += `<div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-top:8px; padding-top:6px; border-top:1px dashed #262b44; font-size:0.78em;">`;
         participantesGrupo.forEach(p => {
             html += `<span style="color:${getColor(p)}; font-weight:700;">● ${getAvatar(p)} ${p}</span>`;
         });
@@ -3109,17 +3102,18 @@ function renderBuzonSolicitudes() {
         const esMia = sol.solicitante === nombreUsuario;
         const dMes = new Date(sol.tsSemanaOrigen);
 
-        // Construimos un mapa de resaltes visuales para el calendario de la solicitud
         const resaltes = {};
         resaltes[sol.tsSemanaOrigen] = [
             {
-                texto: `🔄 ${sol.nombreZonaOrigen}: pasa a ${getAvatar(sol.destinatario)} ${sol.destinatario}`,
+                zona: sol.nombreZonaOrigen,
+                usuario: `➔ ${getAvatar(sol.destinatario)} ${sol.destinatario}`,
                 color: getColor(sol.destinatario)
             }
         ];
         resaltes[sol.tsSemanaDestino] = [
             {
-                texto: `🔄 ${sol.nombreZonaDestino}: pasa a ${getAvatar(sol.solicitante)} ${sol.solicitante}`,
+                zona: sol.nombreZonaDestino,
+                usuario: `➔ ${getAvatar(sol.solicitante)} ${sol.solicitante}`,
                 color: getColor(sol.solicitante)
             }
         ];
@@ -3175,7 +3169,6 @@ window.responderSolicitudIntercambio = async function(idSolicitud, aceptar, esCa
     try {
         if (aceptar) {
             const batch = writeBatch(db);
-            // Aplicamos las dos permutas aisladas: no mueven la rotación de ninguna otra semana
             const refOrigen = doc(db, "grupos", idPisoActual, "zonas_limpieza", sol.idZonaOrigen);
             const refDestino = doc(db, "grupos", idPisoActual, "zonas_limpieza", sol.idZonaDestino);
 
@@ -3252,7 +3245,7 @@ document.getElementById('btnCopiarWifi').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(pass); window.playRetroSound('blip'); await window.mostrarAlerta("Copiado", "Contraseña copiada al portapapeles."); } catch (e) { await window.mostrarAlerta("Contraseña", pass); }
 });
 
-// --- MÓDULO RANKING + NIVELES RPG CON DEBOUNCE (EVITA CÁLCULOS TRIPLICADOS) ---
+// --- MÓDULO RANKING + NIVELES RPG CON DEBOUNCE ---
 function programarRankingGlobal() {
     if (rankingDebounceTimer) clearTimeout(rankingDebounceTimer);
     rankingDebounceTimer = setTimeout(() => {
