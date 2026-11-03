@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Roomy</title>
     
-    <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="manifest.json?v=2">
     <meta name="theme-color" content="#0b0c14">
     <link rel="icon" type="image/png" href="icon-192.png?v=2">
     <link rel="apple-touch-icon" href="icon-192.png?v=2">
@@ -158,6 +158,18 @@
             box-shadow: 0 4px 0 #004d5a;
         }
 
+        .btn-rojo-arcade {
+            background-color: var(--arcade-red);
+            color: #ffffff;
+            border: 2px solid #ffffff;
+            box-shadow: 0 4px 0 #80002a, 4px 4px 0 #000;
+        }
+
+        .btn-rojo-arcade:active:not(:disabled) {
+            transform: translateY(3px);
+            box-shadow: 0 1px 0 #80002a, 2px 2px 0 #000;
+        }
+
         .btn-bizum {
             background-color: var(--arcade-yellow);
             color: #000;
@@ -248,7 +260,7 @@
             box-shadow: 0 3px 0 #000;
         }
 
-        /* Punto de aviso de nueva actividad en la campana */
+        /* Punto de aviso de nueva actividad o solicitud en la campana */
         .notif-dot {
             position: absolute;
             top: -4px;
@@ -300,6 +312,138 @@
             background: var(--bg-panel);
             color: var(--arcade-yellow);
             border: 1px solid var(--arcade-yellow);
+        }
+
+        /* Sub-pestañas para Historial / Solicitudes dentro de la campana */
+        .subtabs-campana {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            background: #090a10;
+            padding: 4px;
+            border: 2px solid var(--border-color);
+            border-radius: 4px;
+            margin-bottom: 14px;
+            gap: 6px;
+        }
+
+        .subtab-btn {
+            padding: 10px 6px;
+            text-align: center;
+            cursor: pointer;
+            color: var(--text-muted);
+            font-family: var(--font-pixel);
+            font-size: 8.5px;
+            border-radius: 2px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .subtab-btn.active {
+            background: var(--bg-panel);
+            color: var(--arcade-yellow);
+            border: 1px solid var(--arcade-yellow);
+        }
+
+        /* Calendario Mensual Real por Cuadrícula (7 columnas L-D + Barra de Turnos por Color) */
+        .cal-visual-box {
+            background: #090a10;
+            border: 2px solid var(--border-color);
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 16px;
+        }
+
+        .cal-weekdays {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            text-align: center;
+            font-family: var(--font-pixel);
+            font-size: 7.5px;
+            color: var(--text-muted);
+            padding-bottom: 6px;
+            border-bottom: 1px solid #262b44;
+            margin-bottom: 6px;
+        }
+
+        .cal-week-row {
+            background: #121524;
+            border: 2px solid #262b44;
+            border-radius: 4px;
+            margin-bottom: 6px;
+            padding: 5px 4px;
+            transition: transform 0.1s, border-color 0.1s;
+        }
+
+        .cal-week-row.cal-week-actual {
+            border-color: var(--arcade-green);
+            background: rgba(46, 196, 182, 0.08);
+        }
+
+        .cal-week-row.cal-week-clickable {
+            cursor: pointer;
+        }
+
+        .cal-week-row.cal-week-clickable:hover {
+            border-color: var(--border-highlight);
+        }
+
+        .cal-week-row.cal-week-selected {
+            border-color: var(--arcade-yellow) !important;
+            background: rgba(255, 190, 11, 0.16) !important;
+            box-shadow: 0 0 8px rgba(255, 190, 11, 0.3);
+        }
+
+        .cal-week-row.cal-week-disabled {
+            opacity: 0.38;
+            background: #1a1c24 !important;
+            border-color: #3a3d4d !important;
+            cursor: not-allowed !important;
+            filter: grayscale(85%);
+        }
+
+        .cal-days-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            text-align: center;
+            font-size: 0.82em;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .cal-day-num {
+            padding: 2px 0;
+            color: var(--text-main);
+        }
+
+        .cal-day-num.otro-mes {
+            color: #4a527a;
+            font-weight: 500;
+        }
+
+        .cal-pills-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            padding: 2px 2px 0 2px;
+        }
+
+        .cal-task-pill {
+            font-size: 0.7em;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: #090a10;
+            border-left: 3px solid var(--border-highlight);
+            color: var(--text-main);
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         /* Listas e Items */
@@ -721,7 +865,7 @@
             <div style="display: flex; align-items: center; gap: 6px;">
                 <button id="btnAbrirGraficos" class="btn-header" title="Estadísticas">📊</button>
                 <button id="btnAbrirTablon" class="btn-header" title="Info del Piso">📌</button>
-                <button id="btnAbrirHistorial" class="btn-header" title="Registro de Actividad">
+                <button id="btnAbrirHistorial" class="btn-header" title="Actividad y Solicitudes">
                     🔔<span id="badgeHistorial" class="notif-dot hidden"></span>
                 </button>
                 
@@ -777,7 +921,7 @@
         <!-- VISTAS PRINCIPALES -->
         <div id="vistasPrincipales">
             
-            <!-- VISTA: GASTOS (REORGANIZADA EN TARJETAS LIMPIAS) -->
+            <!-- VISTA: GASTOS (REORGANIZADA EN TARJETAS LIMPIAS + PLEGAR/DESPLEGAR HISTORIAL) -->
             <div id="vistaGastos">
                 
                 <button id="btnMostrarFormGasto" style="margin-bottom: 14px;">+ AÑADIR GASTO</button>
@@ -834,22 +978,28 @@
                     <div id="listaDeudas" style="margin-top: 10px;"></div>
                 </div>
                 
-                <!-- TARJETA 2: HISTORIAL DE GASTOS -->
+                <!-- TARJETA 2: HISTORIAL DE GASTOS CON OPCIÓN DE OCULTAR/DESPLEGAR -->
                 <div id="listaGastosContenedor" class="card">
-                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 6px;">
                         <h4 style="margin: 0;">📜 HISTORIAL</h4>
-                        <select id="filtroMesGastos" style="width: auto; margin: 0; padding: 4px 8px; font-size: 0.82em; height: 30px;">
-                            <option value="todos">📅 Todos</option>
-                        </select>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <select id="filtroMesGastos" style="width: auto; margin: 0; padding: 4px 8px; font-size: 0.82em; height: 30px;">
+                                <option value="todos">📅 Todos</option>
+                            </select>
+                            <button type="button" id="btnToggleVisibilidadGastos" class="btn-secundario" style="width: auto; margin: 0; padding: 5px 8px; font-size: 8px; height: 30px; box-shadow: none;">▲ OCULTAR</button>
+                        </div>
                     </div>
-                    <p style="font-size: 0.75em; color: var(--text-muted); margin: 0 0 8px 0;">Toca cualquier gasto de la lista para editarlo o borrarlo.</p>
-                    
-                    <div id="listaGastos">Cargando...</div>
 
-                    <!-- Botón de paginación (Ver todos / Ver menos) -->
-                    <button type="button" id="btnToggleMasGastos" class="btn-outline hidden" style="margin-top: 10px; margin-bottom: 0; padding: 8px; font-size: 8.5px;"></button>
+                    <div id="cuerpoHistorialGastos" style="margin-top: 8px;">
+                        <p style="font-size: 0.75em; color: var(--text-muted); margin: 0 0 8px 0;">Toca cualquier gasto de la lista para editarlo o borrarlo.</p>
+                        
+                        <div id="listaGastos">Cargando...</div>
 
-                    <button type="button" id="btnArchivarGastos" class="btn-secundario" style="margin-top: 12px; margin-bottom: 0; padding: 9px; font-size: 8.5px; color: var(--text-muted);">🧹 LIQUIDAR HISTORIAL (CUENTAS A 0€)</button>
+                        <!-- Botón de paginación (Ver todos / Ver menos) -->
+                        <button type="button" id="btnToggleMasGastos" class="btn-outline hidden" style="margin-top: 10px; margin-bottom: 0; padding: 8px; font-size: 8.5px;"></button>
+
+                        <button type="button" id="btnArchivarGastos" class="btn-secundario" style="margin-top: 12px; margin-bottom: 0; padding: 9px; font-size: 8.5px; color: var(--text-muted);">🧹 LIQUIDAR HISTORIAL (CUENTAS A 0€)</button>
+                    </div>
                 </div>
 
             </div>
@@ -870,6 +1020,8 @@
             <!-- VISTA: LIMPIEZA -->
             <div id="vistaLimpieza" class="card hidden">
                 <button type="button" id="btnMostrarFormZona">+ NUEVA ZONA</button>
+                <!-- BOTÓN ROJO PARA INTERCAMBIAR TAREAS JUSTO DEBAJO DE NUEVA ZONA -->
+                <button type="button" id="btnAbrirIntercambio" class="btn-rojo-arcade">🔄 INTERCAMBIAR TAREAS</button>
                 
                 <div id="formZona" class="hidden" style="background: #090a10; padding: 14px; border-radius: 4px; margin-bottom: 18px; border: 2px solid var(--border-highlight);">
                     <h4 id="tituloFormZona">NUEVA ZONA</h4>
@@ -901,11 +1053,16 @@
                     <div id="listaLimpieza">Cargando...</div>
                     
                     <div id="calendarioMensual" class="hidden">
-                        <div style="display: flex; justify-content: space-between; align-items: center; background: #090a10; border: 2px solid var(--border-color); padding: 8px 12px; border-radius: 4px; margin-bottom: 14px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; background: #090a10; border: 2px solid var(--border-color); padding: 8px 12px; border-radius: 4px; margin-bottom: 12px;">
                             <button type="button" id="btnMesAnterior" style="background: none; border: none; box-shadow: none; color: var(--arcade-yellow); font-size: 1.1em; width:auto; padding:4px; margin:0;">◀</button>
                             <h4 id="textoMesAnio" style="margin: 0; color: var(--text-main);">Cargando...</h4>
                             <button type="button" id="btnMesSiguiente" style="background: none; border: none; box-shadow: none; color: var(--arcade-yellow); font-size: 1.1em; width:auto; padding:4px; margin:0;">▶</button>
                         </div>
+
+                        <!-- NUEVO CALENDARIO VISUAL REAL ARRIBA (POR COLORES DE USUARIO) -->
+                        <div id="gridCalendarioVisual" class="cal-visual-box"></div>
+
+                        <!-- DESGLOSE SEMANA A SEMANA DEBAJO AL HACER SCROLL -->
                         <div id="contenedorSemanasMes"></div>
                     </div>
                 </div>
@@ -927,6 +1084,44 @@
                 <h4>HALL OF FAME 🏆</h4>
                 <p style="font-size: 0.85em; color: var(--text-muted); margin-top: -6px; margin-bottom: 16px;">Nivel, XP y rangos según finanzas y misiones.</p>
                 <div id="contenidoRanking">Calculando ranking...</div>
+            </div>
+        </div>
+
+        <!-- PESTAÑA FLOTANTE: ASISTENTE DE INTERCAMBIO DE TAREAS (4 PASOS) -->
+        <div id="modalIntercambioOverlay" class="hidden" style="background: rgba(0, 0, 0, 0.85); position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 150; padding: 14px; box-sizing: border-box; overflow-y: auto; display: flex; align-items: center; justify-content: center;">
+            <div class="card" style="width: 100%; max-width: 400px; max-height: 90vh; overflow-y: auto; margin: 0; border: 3px solid #fff; box-shadow: 6px 6px 0 #000;">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border-color); padding-bottom: 10px; margin-bottom: 12px;">
+                    <div>
+                        <span id="swapPasoIndicador" style="font-family: var(--font-pixel); font-size: 0.6em; color: var(--arcade-yellow);">PASO 1 DE 4</span>
+                        <h3 style="margin: 4px 0 0 0; font-size: 0.85em; color: #fff;">🔄 INTERCAMBIAR TAREA</h3>
+                    </div>
+                    <button type="button" id="btnCerrarIntercambio" class="btn-secundario" style="width: auto; padding: 6px 10px; margin: 0; font-size: 9px;">✕</button>
+                </div>
+
+                <p id="swapInstruccionTexto" style="font-size: 0.88em; color: var(--border-highlight); font-weight: 700; margin-top: 0; margin-bottom: 12px; line-height: 1.35;"></p>
+
+                <!-- CONTENEDOR CALENDARIO INTERACTIVO (Usado en Paso 1 y Paso 3) -->
+                <div id="swapCalendarioBox">
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: #090a10; border: 2px solid var(--border-color); padding: 6px 10px; border-radius: 4px; margin-bottom: 10px;">
+                        <button type="button" id="btnSwapMesAnt" style="background: none; border: none; box-shadow: none; color: var(--arcade-yellow); font-size: 1em; width:auto; padding:4px; margin:0;">◀</button>
+                        <h4 id="textoSwapMesAnio" style="margin: 0; color: var(--text-main); font-size: 0.72em;">Mes</h4>
+                        <button type="button" id="btnSwapMesSig" style="background: none; border: none; box-shadow: none; color: var(--arcade-yellow); font-size: 1em; width:auto; padding:4px; margin:0;">▶</button>
+                    </div>
+                    <div id="swapGridSemanas" class="cal-visual-box" style="margin-bottom: 10px;"></div>
+                </div>
+
+                <!-- CONTENEDOR DESPLEGABLE (Usado en Paso 2 y Paso 4) -->
+                <div id="swapSelectorBox" class="hidden">
+                    <div id="swapResumenSeleccionPrevia" style="background: #090a10; border: 1px solid var(--border-color); border-left: 3px solid var(--arcade-yellow); padding: 10px; border-radius: 4px; margin-bottom: 12px; font-size: 0.85em;"></div>
+                    <label id="swapLabelSelect" style="color: var(--text-muted); font-size: 0.82em; display: block; margin-bottom: 6px;">Selecciona la tarea:</label>
+                    <select id="swapSelectTarea" style="padding: 12px;"></select>
+                </div>
+
+                <!-- BOTONES DE NAVEGACIÓN DEL ASISTENTE -->
+                <div style="display: flex; gap: 8px; margin-top: 12px;">
+                    <button type="button" id="btnSwapAtras" class="btn-secundario hidden" style="margin-bottom: 0; flex: 1;">⬅ ATRÁS</button>
+                    <button type="button" id="btnSwapConfirmarPaso" class=" hidden" style="margin-bottom: 0; flex: 2; background: var(--arcade-green); color: #000;">CONFIRMAR SELECCIÓN</button>
+                </div>
             </div>
         </div>
 
@@ -967,6 +1162,23 @@
                     <h4>CONTROL DE FALTAS (MANUAL)</h4>
                     <p style="font-size: 0.82em; color: var(--text-muted); margin-top: -6px; margin-bottom: 14px;">Suma o resta faltas directamente a cualquier compañero.</p>
                     <div id="listaControlFaltasMaster" style="display: flex; flex-direction: column; gap: 10px;"></div>
+                </div>
+
+                <!-- REASIGNAR TURNOS Y SEMANAS -->
+                <div class="card">
+                    <h4>CAMBIAR TURNO DE LIMPIEZA</h4>
+                    <p style="font-size: 0.82em; color: var(--text-muted); margin-top: -6px; margin-bottom: 12px;">Elige una tarea, la semana y a quién le toca. A partir de esa semana la rotación continuará en orden respetando las reglas del piso:</p>
+                    
+                    <label style="color: var(--text-muted); font-size: 0.8em; display: block; margin-bottom: 4px;">Tarea / Zona:</label>
+                    <select id="masterSelectZona" style="padding: 10px;"></select>
+
+                    <label style="color: var(--text-muted); font-size: 0.8em; display: block; margin-bottom: 4px;">Semana:</label>
+                    <select id="masterSelectSemana" style="padding: 10px;"></select>
+
+                    <label style="color: var(--text-muted); font-size: 0.8em; display: block; margin-bottom: 4px;">Le toca a:</label>
+                    <select id="masterSelectResponsable" style="padding: 10px;"></select>
+
+                    <button type="button" id="btnMasterGuardarTurno" style="margin-bottom: 0; background: var(--arcade-yellow); color: #000;">APLICAR CAMBIO DE TURNO</button>
                 </div>
 
                 <div class="card">
@@ -1036,17 +1248,34 @@
             </div>
         </div>
         
-        <!-- VISTA ESPECIAL: HISTORIAL -->
+        <!-- VISTA ESPECIAL: CAMPANA (CON PESTAÑA DE HISTORIAL Y PESTAÑA DE SOLICITUDES DE INTERCAMBIO) -->
         <div id="vistaHistorial" class="hidden" style="background: var(--bg-dark); position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; padding: 16px; box-sizing: border-box; overflow-y: auto; padding-bottom: 80px;">
             <div style="max-width: 420px; margin: 0 auto;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; padding-top: 6px; position: sticky; top: 0; background: var(--bg-dark); z-index: 101; padding-bottom: 10px; border-bottom: 2px solid var(--border-color);">
-                    <h2 style="margin: 0;">🔔 LOGS</h2>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-top: 6px; position: sticky; top: 0; background: var(--bg-dark); z-index: 101; padding-bottom: 10px; border-bottom: 2px solid var(--border-color);">
+                    <h2 style="margin: 0;">🔔 CENTRO AVISOS</h2>
                     <div style="display: flex; gap: 8px;">
                         <button type="button" id="btnVaciarHistorial" style="background: #090a10; color: var(--arcade-red); border: 2px solid var(--arcade-red); padding: 8px 10px; width: auto; margin: 0; box-shadow: none;">VACIAR</button>
                         <button type="button" id="btnCerrarHistorial" class="btn-secundario" style="padding: 8px 12px; width: auto; margin: 0;">CERRAR</button>
                     </div>
                 </div>
-                <div id="listaHistorial" class="card" style="display: flex; flex-direction: column; gap: 6px;"></div>
+
+                <!-- SELECTOR DE SECCIÓN: HISTORIAL O SOLICITUDES -->
+                <div class="subtabs-campana">
+                    <div id="subtabActividad" class="subtab-btn active">📜 HISTORIAL</div>
+                    <div id="subtabSolicitudes" class="subtab-btn">
+                        🔄 SOLICITUDES <span id="contadorSolicitudesCampana" class="hidden" style="background: var(--arcade-red); color: #fff; padding: 2px 5px; border-radius: 3px; font-size: 8px;">0</span>
+                    </div>
+                </div>
+
+                <!-- SECCIÓN 1: HISTORIAL DE ACTIVIDAD -->
+                <div id="seccionLogsActividad">
+                    <div id="listaHistorial" class="card" style="display: flex; flex-direction: column; gap: 6px;"></div>
+                </div>
+
+                <!-- SECCIÓN 2: BUZÓN DE SOLICITUDES DE INTERCAMBIO -->
+                <div id="seccionBuzonSolicitudes" class="hidden">
+                    <div id="listaSolicitudesIntercambio" style="display: flex; flex-direction: column; gap: 12px;"></div>
+                </div>
             </div>
         </div>
 
@@ -1088,7 +1317,7 @@
 
     </div>
 
-    <!-- MODAL RETRO (Soporta alertas, inputs y el nuevo selector visual de colores) -->
+    <!-- MODAL RETRO (Soporta alertas, inputs y el selector visual de colores) -->
     <div id="iosModalOverlay">
         <div id="iosModalBox">
             <h3 id="iosModalTitle">TÍTULO</h3>
