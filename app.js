@@ -32,6 +32,7 @@ const PATCH_VERSION = "v2.0_retro";
 
 const EMOJIS_BASE = ["🦊", "🐼", "🐵", "🐶", "🐱", "🐯", "🐨", "🐸", "🐷", "🐻", "🐰", "🦁", "🐮", "🐙", "🐢", "👽", "🤖", "👻", "🤡", "👾"];
 const COLORES_HEX_BASE = ["#ff453a", "#ff9f0a", "#ffd60a", "#32d74b", "#66d4cf", "#0a84ff", "#bf5af2", "#ff375f", "#a2845e", "#86868b"];
+const NOMBRES_MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
 async function activarNotificacionesPush() {
     try {
@@ -58,6 +59,8 @@ let nombresNuevos = [];
 let idGastoEditando = null;
 let idZonaEditando = null;
 let zonasLimpiezaCache = [];
+let solicitudesIntercambioCache = [];
+let datosGrupoCache = {};
 let fechaCalendario = new Date();
 let misPisos = JSON.parse(localStorage.getItem('misPisos_v2')) || [];
 let ultimoPisoActivo = localStorage.getItem('ultimoPisoActivo');
@@ -66,17 +69,32 @@ let unsubGastos = null;
 let unsubCompra = null;
 let unsubLimpieza = null;
 let unsubHistorial = null;
+let unsubSolicitudes = null;
 let ultimosGastos = [];
 let ultimosBalances = {};
 let strikesAutomaticos = {};
 let ultimosStrikes = {};
 let parcheLogRegistradoEnGrupo = false;
 let mostrarTodosGastos = false;
+let historialGastosOculto = localStorage.getItem('historialGastosOculto') === 'true';
 let rankingDebounceTimer = null;
 let chartJsCargado = false;
 
 let chartMisGastosObj = null;
 let chartPisoGastosObj = null;
+
+// Estado del Asistente de Intercambio de Tareas (4 pasos)
+let swapState = {
+    paso: 1,
+    fechaMes: new Date(),
+    tsSemanaOrigen: null,
+    idZonaOrigen: null,
+    nombreZonaOrigen: "",
+    tsSemanaDestino: null,
+    idZonaDestino: null,
+    nombreZonaDestino: "",
+    destinatario: ""
+};
 
 // --- CARGA BAJO DEMANDA DE CHART.JS ---
 async function asegurarChartJs() {
@@ -181,8 +199,8 @@ function comprobarYMostrarNovedades(idPiso) {
                 </div>
 
                 <div style="background: #090a10; border: 1px solid #262b44; border-left: 3px solid var(--arcade-red); padding: 10px; border-radius: 4px;">
-                    <div style="font-weight: 700; color: var(--arcade-red); margin-bottom: 3px;">🚩 Sistema VAR en Limpieza</div>
-                    <div style="color: var(--text-muted); font-size: 0.92em;">Si alguien marca una tarea como hecha sin haber limpiado, <b>2 compañeros</b> pueden pulsar <b>🚩 VAR</b> para anularla y meterle <b>+1 falta</b> por intento de tongo.</div>
+                    <div style="font-weight: 700; color: var(--arcade-red); margin-bottom: 3px;">🚩 Sistema VAR e Intercambios</div>
+                    <div style="color: var(--text-muted); font-size: 0.92em;">Impugna limpiezas falsas con <b>🚩 VAR</b> (2 votos) o solicita intercambiar semanas de limpieza con tus compañeros desde el botón rojo.</div>
                 </div>
 
                 <div style="background: #090a10; border: 1px solid #262b44; border-left: 3px solid var(--arcade-green); padding: 10px; border-radius: 4px;">
@@ -211,7 +229,7 @@ function comprobarYMostrarNovedades(idPiso) {
                     parche_notificado: PATCH_VERSION
                 });
                 await registrarActividad(
-                    `ACTUALIZACIÓN V2.0: Nuevo menú de perfil, gráficos (📊), filtro mensual, niveles XP en el Top y sistema 🚩 VAR en tareas (2 votos anulan limpieza + 1 falta).`,
+                    `ACTUALIZACIÓN V2.0: Nuevo menú de perfil, gráficos (📊), filtro mensual, niveles XP, sistema 🚩 VAR e intercambio de tareas.`,
                     "🕹️"
                 );
             } catch (e) { console.error(e); }
@@ -250,7 +268,7 @@ function esUsuarioMaster() {
     return n === 'diego' || nombreUsuario === creadorGrupo;
 }
 
-// --- SISTEMA DE HISTORIAL DE ACTIVIDAD Y BADGE DE NOTIFICACIÓN (0 LECTURAS EXTRA) ---
+// --- SISTEMA DE HISTORIAL DE ACTIVIDAD Y BADGE DE NOTIFICACIÓN ---
 async function registrarActividad(mensaje, icono) {
     if (!idPisoActual) return;
     const ahora = Date.now();
@@ -260,7 +278,6 @@ async function registrarActividad(mensaje, icono) {
             icono: icono,
             fecha: ahora
         });
-        // Actualizamos la marca en el documento del grupo para encender el punto rojo a los compañeros sin gastar lecturas de historial
         await updateDoc(doc(db, "grupos", idPisoActual), {
             ultima_actividad: ahora,
             ultimo_autor_actividad: nombreUsuario
@@ -269,26 +286,40 @@ async function registrarActividad(mensaje, icono) {
     } catch (e) { console.error("Error al registrar actividad", e); }
 }
 
-function verificarBadgeHistorial(datosGrupo) {
+function verificarBadgeHistorial(datosGrupo = datosGrupoCache) {
     const badge = document.getElementById('badgeHistorial');
+    const contadorSol = document.getElementById('contadorSolicitudesCampana');
     if (!badge || !idPisoActual) return;
+
+    const misSolicitudesPendientes = solicitudesIntercambioCache.filter(
+        s => s.destinatario === nombreUsuario && s.estado === 'pendiente'
+    ).length;
+
+    if (contadorSol) {
+        if (misSolicitudesPendientes > 0) {
+            contadorSol.innerText = String(misSolicitudesPendientes);
+            contadorSol.classList.remove('hidden');
+        } else {
+            contadorSol.classList.add('hidden');
+        }
+    }
 
     const ultimaAct = datosGrupo.ultima_actividad || 0;
     const ultimoAutor = datosGrupo.ultimo_autor_actividad || "";
     const vistoLocal = Number(localStorage.getItem(`visto_hist_${idPisoActual}`) || 0);
 
-    // Si nunca ha tenido marca local, inicializamos al momento actual para no encender en falso al primer inicio
     if (vistoLocal === 0) {
         localStorage.setItem(`visto_hist_${idPisoActual}`, String(ultimaAct || Date.now()));
-        badge.classList.add('hidden');
-        return;
     }
 
     const histAbierto = !document.getElementById('vistaHistorial').classList.contains('hidden');
     if (histAbierto) {
         localStorage.setItem(`visto_hist_${idPisoActual}`, String(Date.now()));
-        badge.classList.add('hidden');
-    } else if (ultimaAct > vistoLocal && ultimoAutor !== nombreUsuario) {
+    }
+
+    const hayActividadNoVista = !histAbierto && (ultimaAct > vistoLocal) && (ultimoAutor !== nombreUsuario);
+
+    if (misSolicitudesPendientes > 0 || hayActividadNoVista) {
         badge.classList.remove('hidden');
     } else {
         badge.classList.add('hidden');
@@ -410,6 +441,7 @@ const pantallaDashboard = document.getElementById('pantallaDashboard');
 
 async function iniciarApp() {
     actualizarTextoBotonSonido();
+    actualizarVisibilidadHistorialGastos();
     const urlParams = new URLSearchParams(window.location.search);
     const pisoIdUrl = urlParams.get('id');
     if (pisoIdUrl) { 
@@ -581,7 +613,6 @@ document.getElementById('btnAñadirNombre').addEventListener('click', () => {
     }
 });
 
-// Soporte para tecla Enter al añadir inquilinos creando el piso
 document.getElementById('inputNuevoNombre').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
         e.preventDefault();
@@ -737,6 +768,7 @@ async function mostrarDashboard(nombre, id) {
     unsubGrupo = onSnapshot(doc(db, "grupos", id), (docSnap) => {
         if (docSnap.exists()) {
             const datos = docSnap.data();
+            datosGrupoCache = datos;
             window.avataresGrupo = datos.avatares || {};
             window.coloresGrupo = datos.colores || {};
             window.ajustesFaltasGrupo = datos.ajustes_faltas || {};
@@ -768,7 +800,7 @@ async function mostrarDashboard(nombre, id) {
     cargarListaGastos();
     cargarListaLimpieza();
     cargarListaCompra();
-    // NOTA: cargarHistorial() ahora es Lazy Load y solo se conecta al abrir el botón 🔔
+    cargarSolicitudesIntercambio();
     activarNotificacionesPush();
 }
 
@@ -865,7 +897,6 @@ document.getElementById('btnGuardarNuevoInquilino').addEventListener('click', as
     }
 });
 
-// Soporte para tecla Enter al añadir inquilino desde el panel
 document.getElementById('inputAñadirInquilinoPanel').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
         e.preventDefault();
@@ -963,12 +994,30 @@ window.renombrarInquilinoPiso = async function(nombreViejo) {
                 }
             });
 
+            let nuevasAnclas = { ...(z.anclas_turno || {}) };
+            Object.keys(nuevasAnclas).forEach(ts => {
+                if (nuevasAnclas[ts] === nombreViejo) {
+                    nuevasAnclas[ts] = nuevoNombre;
+                    cambiado = true;
+                }
+            });
+
+            let nuevasPermutas = { ...(z.permutas_semana || {}) };
+            Object.keys(nuevasPermutas).forEach(ts => {
+                if (nuevasPermutas[ts] === nombreViejo) {
+                    nuevasPermutas[ts] = nuevoNombre;
+                    cambiado = true;
+                }
+            });
+
             if (cambiado) {
                 const zonaRef = doc(db, "grupos", idPisoActual, "zonas_limpieza", z.id);
                 batch.update(zonaRef, {
                     responsables: nuevosResp,
                     semanas_hechas: nuevasHechas,
-                    var_votos: nuevosVar
+                    var_votos: nuevosVar,
+                    anclas_turno: nuevasAnclas,
+                    permutas_semana: nuevasPermutas
                 });
             }
         });
@@ -1045,7 +1094,7 @@ window.eliminarInquilinoPiso = async function(nombreBorrar) {
     }
 };
 
-// --- LÓGICA DEL PANEL MAESTRO (EXCLUSIVO ADMIN) ---
+// --- LÓGICA DEL PANEL MAESTRO (CONTROL DE FALTAS, CAMBIO DE TURNOS Y AUDITORÍA) ---
 document.getElementById('btnAbrirMaster').addEventListener('click', async () => {
     menuPerfil.classList.add('hidden');
     if (!esUsuarioMaster()) return;
@@ -1092,12 +1141,15 @@ window.anularTareaSemanaActual = async function(idZona, nombreZona, responsable)
     const seguro = await window.mostrarConfirmacion("Anular Tarea", `¿Desmarcar "${nombreZona}" de ${responsable} por no haberla hecho realmente?`);
     if (!seguro) return;
 
-    const tsActual = new Date(obtenerLunes(new Date())).getTime();
+    const tsActual = obtenerLunes(new Date());
     try {
-        await updateDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZona), {
+        const updateObj = {
             [`semanas_hechas.${tsActual}`]: deleteField(),
+            [`semanas_hechas.${tsActual - 3600000}`]: deleteField(),
+            [`semanas_hechas.${tsActual + 3600000}`]: deleteField(),
             [`var_votos.${tsActual}`]: deleteField()
-        });
+        };
+        await updateDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZona), updateObj);
         window.playRetroSound('hit');
         registrarActividad(`👑 **${nombreUsuario}** anuló la validación de "${nombreZona}" (${responsable}).`, "🚨");
         renderPanelMaestro();
@@ -1105,6 +1157,163 @@ window.anularTareaSemanaActual = async function(idZona, nombreZona, responsable)
         await window.mostrarAlerta("Error", "No se pudo anular la tarea.");
     }
 };
+
+function actualizarSelectoresTurnoMaster() {
+    const selZona = document.getElementById('masterSelectZona');
+    const selSem = document.getElementById('masterSelectSemana');
+    const selResp = document.getElementById('masterSelectResponsable');
+    const btnGuardar = document.getElementById('btnMasterGuardarTurno');
+    if (!selZona || !selSem || !selResp || !btnGuardar) return;
+
+    if (zonasLimpiezaCache.length === 0) {
+        selZona.innerHTML = '<option value="">Sin zonas creadas</option>';
+        selSem.innerHTML = '<option value="">-</option>';
+        selResp.innerHTML = '<option value="">-</option>';
+        btnGuardar.disabled = true;
+        return;
+    }
+    btnGuardar.disabled = false;
+
+    const prevZona = selZona.value;
+    let htmlZonas = '';
+    zonasLimpiezaCache.forEach(z => {
+        const tagTipo = esZonaComunParaTodos(z) ? '🏠 Común' : '🚿 Parcial';
+        htmlZonas += `<option value="${z.id}">${z.nombre_zona} (${tagTipo})</option>`;
+    });
+    selZona.innerHTML = htmlZonas;
+    if (zonasLimpiezaCache.some(z => z.id === prevZona)) {
+        selZona.value = prevZona;
+    }
+
+    poblarSemanasYResponsablesMaster();
+}
+
+function poblarSemanasYResponsablesMaster() {
+    const selZona = document.getElementById('masterSelectZona');
+    const selSem = document.getElementById('masterSelectSemana');
+    if (!selZona || !selSem) return;
+
+    const zonaObj = zonasLimpiezaCache.find(z => z.id === selZona.value);
+    if (!zonaObj) return;
+
+    const tsHoy = obtenerLunes(new Date());
+    const prevSem = Number(selSem.value);
+    let htmlSemanas = '';
+    let opcionesValidas = [];
+
+    for (let offset = -4; offset <= 8; offset++) {
+        const tsLunes = sumarDiasCalendario(tsHoy, offset * 7);
+        const freq = zonaObj.frecuencia || 1;
+        const tsBase = obtenerLunes(new Date(zonaObj.fecha_base));
+        const semDiff = Math.round((tsLunes - tsBase) / 604800000);
+        if (semDiff >= 0 && semDiff % freq !== 0) continue;
+
+        const dLun = new Date(tsLunes);
+        const dDom = new Date(sumarDiasCalendario(tsLunes, 6));
+        const strLun = dLun.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+        const strDom = dDom.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+        const etiqueta = offset === 0 
+            ? `📍 Esta semana (${strLun} - ${strDom})` 
+            : (offset < 0 ? `⏪ Hace ${Math.abs(offset)} sem (${strLun} - ${strDom})` : `⏩ En +${offset} sem (${strLun} - ${strDom})`);
+
+        htmlSemanas += `<option value="${tsLunes}">${etiqueta}</option>`;
+        opcionesValidas.push(tsLunes);
+    }
+
+    selSem.innerHTML = htmlSemanas;
+    if (opcionesValidas.includes(prevSem)) {
+        selSem.value = String(prevSem);
+    } else if (opcionesValidas.includes(tsHoy)) {
+        selSem.value = String(tsHoy);
+    }
+
+    actualizarResponsablesMasterSegunSemana();
+}
+
+function actualizarResponsablesMasterSegunSemana() {
+    const selZona = document.getElementById('masterSelectZona');
+    const selSem = document.getElementById('masterSelectSemana');
+    const selResp = document.getElementById('masterSelectResponsable');
+    if (!selZona || !selSem || !selResp) return;
+
+    const zonaObj = zonasLimpiezaCache.find(z => z.id === selZona.value);
+    const tsSemana = Number(selSem.value);
+    if (!zonaObj || !tsSemana) return;
+
+    const asigs = calcularAsignacionesParaSemana(new Date(tsSemana));
+    const asigZona = asigs.find(a => a.idZona === zonaObj.id);
+    const actualAsignado = asigZona ? asigZona.leTocaA : '';
+
+    let htmlResp = '';
+    (zonaObj.responsables || []).forEach(p => {
+        const marcaActual = (p === actualAsignado) ? ' (Asignado actual)' : '';
+        htmlResp += `<option value="${p}" ${p === actualAsignado ? 'selected' : ''}>${getAvatar(p)} ${p}${marcaActual}</option>`;
+    });
+    selResp.innerHTML = htmlResp;
+}
+
+document.getElementById('masterSelectZona').addEventListener('change', () => {
+    window.playRetroSound('blip');
+    poblarSemanasYResponsablesMaster();
+});
+
+document.getElementById('masterSelectSemana').addEventListener('change', () => {
+    window.playRetroSound('blip');
+    actualizarResponsablesMasterSegunSemana();
+});
+
+document.getElementById('btnMasterGuardarTurno').addEventListener('click', async () => {
+    const idZona = document.getElementById('masterSelectZona').value;
+    const tsSemana = Number(document.getElementById('masterSelectSemana').value);
+    const nuevoResp = document.getElementById('masterSelectResponsable').value;
+
+    const zonaObj = zonasLimpiezaCache.find(z => z.id === idZona);
+    if (!zonaObj || !tsSemana || !nuevoResp) return;
+
+    const btn = document.getElementById('btnMasterGuardarTurno');
+    btn.disabled = true;
+    btn.innerText = "APLICANDO...";
+
+    try {
+        const nuevasAnclas = { ...(zonaObj.anclas_turno || {}) };
+        const nuevasPrios = { ...(zonaObj.anclas_prio || {}) };
+        const nuevasPermutas = { ...(zonaObj.permutas_semana || {}) };
+
+        Object.keys(nuevasAnclas).forEach(tsKey => {
+            if (Number(tsKey) >= tsSemana) {
+                delete nuevasAnclas[tsKey];
+                delete nuevasPrios[tsKey];
+            }
+        });
+        // Si había una permuta aislada en esa misma semana para esta zona, la limpiamos para que mande el nuevo turno maestro
+        delete nuevasPermutas[tsSemana];
+
+        nuevasAnclas[tsSemana] = nuevoResp;
+        nuevasPrios[tsSemana] = Date.now();
+
+        const updateData = {
+            anclas_turno: nuevasAnclas,
+            anclas_prio: nuevasPrios,
+            permutas_semana: nuevasPermutas
+        };
+
+        const tsBaseActual = obtenerLunes(new Date(zonaObj.fecha_base));
+        if (tsSemana < tsBaseActual) {
+            updateData.fecha_base = new Date(tsSemana).toISOString();
+        }
+
+        await updateDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZona), updateData);
+        window.playRetroSound('powerup');
+        const fechaStr = new Date(tsSemana).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+        await window.mostrarAlerta("Turno Actualizado", `En la semana del ${fechaStr}, "${zonaObj.nombre_zona}" pasa a ${nuevoResp} y las semanas siguientes rotan en orden.`);
+    } catch (e) {
+        console.error(e);
+        await window.mostrarAlerta("Error", "No se pudo aplicar el cambio de turno.");
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "APLICAR CAMBIO DE TURNO";
+    }
+});
 
 function renderPanelMaestro() {
     const contFaltas = document.getElementById('listaControlFaltasMaster');
@@ -1129,9 +1338,11 @@ function renderPanelMaestro() {
     });
     contFaltas.innerHTML = htmlFaltas;
 
-    const tsActual = new Date(obtenerLunes(new Date())).getTime();
+    actualizarSelectoresTurnoMaster();
+
+    const tsActual = obtenerLunes(new Date());
     const asigs = calcularAsignacionesParaSemana(new Date(tsActual));
-    const hechasEstaSemana = asigs.filter(a => (a.zonaRef.semanas_hechas || {})[tsActual]);
+    const hechasEstaSemana = asigs.filter(a => obtenerConfirmacionSemana(a.zonaRef, tsActual));
 
     if (hechasEstaSemana.length === 0) {
         contTareas.innerHTML = '<p style="color: var(--text-muted); text-align: center; font-size: 0.85em; margin: 0;">Nadie ha marcado tareas como completadas esta semana todavía.</p>';
@@ -1155,7 +1366,7 @@ document.getElementById('btnCambiarUsuarioMenu').addEventListener('click', async
     menuPerfil.classList.add('hidden');
     const seguro = await window.mostrarConfirmacion("Cambiar quién soy", "¿Entraste con el nombre de otro compañero por error? Volverás a la pantalla para elegir quién eres.");
     if (seguro) {
-        if(unsubGrupo) unsubGrupo(); if(unsubGastos) unsubGastos(); if(unsubCompra) unsubCompra(); if(unsubLimpieza) unsubLimpieza(); if(unsubHistorial) unsubHistorial();
+        if(unsubGrupo) unsubGrupo(); if(unsubGastos) unsubGastos(); if(unsubCompra) unsubCompra(); if(unsubLimpieza) unsubLimpieza(); if(unsubHistorial) unsubHistorial(); if(unsubSolicitudes) unsubSolicitudes();
         localStorage.removeItem('ultimoPisoActivo');
         document.getElementById('pantallaDashboard').classList.add('hidden');
         document.body.classList.add('pantalla-centrada');
@@ -1164,7 +1375,6 @@ document.getElementById('btnCambiarUsuarioMenu').addEventListener('click', async
     }
 });
 
-// AVATAR SE MANTIENE IGUAL (CON PROMPT DE EMOJI)
 document.getElementById('btnCambiarAvatar').addEventListener('click', async () => {
     menuPerfil.classList.add('hidden');
     const nuevoEmoji = await window.mostrarPrompt("Cambiar mi Avatar", "Escribe o pega el emoji para tu perfil (Ej: 👽, 🦊, 👾):");
@@ -1185,7 +1395,6 @@ document.getElementById('btnCambiarAvatar').addEventListener('click', async () =
     }
 });
 
-// SELECTOR VISUAL DE COLORES (1 CLIC SIN ESCRIBIR NÚMEROS)
 document.getElementById('btnCambiarColor').addEventListener('click', async () => {
     menuPerfil.classList.add('hidden');
     
@@ -1277,15 +1486,56 @@ document.getElementById('btnCerrarGraficos').addEventListener('click', () => { w
 document.getElementById('btnAbrirTablon').addEventListener('click', () => { window.playRetroSound('blip'); window.scrollTo(0, 0); document.body.style.overflow = 'hidden'; document.getElementById('vistaTablon').classList.remove('hidden'); });
 document.getElementById('btnCerrarTablon').addEventListener('click', () => { window.playRetroSound('blip'); document.body.style.overflow = 'auto'; document.getElementById('vistaTablon').classList.add('hidden'); });
 
-// HISTORIAL CON CARGA DIFERIDA (LAZY LOAD) Y LIMPIEZA DEL PUNTO DE AVISO
+// --- CENTRO DE AVISOS (BELL): SECCIÓN HISTORIAL Y SECCIÓN SOLICITUDES ---
+function activarSubtabCampana(modo) {
+    const btnAct = document.getElementById('subtabActividad');
+    const btnSol = document.getElementById('subtabSolicitudes');
+    const secAct = document.getElementById('seccionLogsActividad');
+    const secSol = document.getElementById('seccionBuzonSolicitudes');
+    const btnVaciar = document.getElementById('btnVaciarHistorial');
+
+    if (modo === 'solicitudes') {
+        btnAct.classList.remove('active');
+        btnSol.classList.add('active');
+        secAct.classList.add('hidden');
+        secSol.classList.remove('hidden');
+        if (btnVaciar) btnVaciar.classList.add('hidden');
+        renderBuzonSolicitudes();
+    } else {
+        btnSol.classList.remove('active');
+        btnAct.classList.add('active');
+        secSol.classList.add('hidden');
+        secAct.classList.remove('hidden');
+        if (btnVaciar) btnVaciar.classList.remove('hidden');
+        cargarHistorial();
+    }
+}
+
+document.getElementById('subtabActividad').addEventListener('click', () => {
+    window.playRetroSound('blip');
+    activarSubtabCampana('actividad');
+});
+
+document.getElementById('subtabSolicitudes').addEventListener('click', () => {
+    window.playRetroSound('blip');
+    activarSubtabCampana('solicitudes');
+});
+
 document.getElementById('btnAbrirHistorial').addEventListener('click', () => { 
     window.playRetroSound('blip'); 
     window.scrollTo(0, 0); 
     document.body.style.overflow = 'hidden'; 
     document.getElementById('vistaHistorial').classList.remove('hidden');
-    document.getElementById('badgeHistorial').classList.add('hidden');
     if (idPisoActual) localStorage.setItem(`visto_hist_${idPisoActual}`, String(Date.now()));
-    cargarHistorial();
+
+    // Si el usuario tiene solicitudes pendientes para él, abrimos directamente la pestaña de Solicitudes
+    const misPendientes = solicitudesIntercambioCache.filter(s => s.destinatario === nombreUsuario && s.estado === 'pendiente').length;
+    if (misPendientes > 0) {
+        activarSubtabCampana('solicitudes');
+    } else {
+        activarSubtabCampana('actividad');
+    }
+    verificarBadgeHistorial();
 });
 
 document.getElementById('btnCerrarHistorial').addEventListener('click', () => { 
@@ -1296,6 +1546,7 @@ document.getElementById('btnCerrarHistorial').addEventListener('click', () => {
         unsubHistorial();
         unsubHistorial = null;
     }
+    verificarBadgeHistorial();
 });
 
 document.getElementById('btnVaciarHistorial').addEventListener('click', async () => {
@@ -1425,7 +1676,35 @@ function actualizarGraficos() {
     if (ctxPiso && window.Chart) chartPisoGastosObj = new Chart(ctxPiso, configParams(pisoData));
 }
 
-// --- MÓDULO GASTOS (MODO ENFOQUE + HISTORIAL LIMPIO + PAGINACIÓN DE 6 ELEMENTOS) ---
+// --- MÓDULO GASTOS (MODO ENFOQUE + PLEGAR/DESPLEGAR HISTORIAL + PAGINACIÓN DE 6 ELEMENTOS) ---
+function actualizarVisibilidadHistorialGastos() {
+    const cuerpo = document.getElementById('cuerpoHistorialGastos');
+    const filtro = document.getElementById('filtroMesGastos');
+    const btn = document.getElementById('btnToggleVisibilidadGastos');
+    if (!cuerpo || !btn) return;
+
+    if (historialGastosOculto) {
+        cuerpo.classList.add('hidden');
+        if (filtro) filtro.classList.add('hidden');
+        btn.innerText = '▼ MOSTRAR';
+        btn.style.borderColor = 'var(--border-highlight)';
+        btn.style.color = 'var(--border-highlight)';
+    } else {
+        cuerpo.classList.remove('hidden');
+        if (filtro) filtro.classList.remove('hidden');
+        btn.innerText = '▲ OCULTAR';
+        btn.style.borderColor = 'var(--border-color)';
+        btn.style.color = 'var(--text-main)';
+    }
+}
+
+document.getElementById('btnToggleVisibilidadGastos').addEventListener('click', () => {
+    window.playRetroSound('blip');
+    historialGastosOculto = !historialGastosOculto;
+    localStorage.setItem('historialGastosOculto', String(historialGastosOculto));
+    actualizarVisibilidadHistorialGastos();
+});
+
 window.usarPlantillaGasto = function(concepto, categoria) {
     window.playRetroSound('blip');
     document.getElementById('conceptoGasto').value = concepto;
@@ -1652,7 +1931,7 @@ function actualizarOpcionesFiltroMes() {
     if (!select) return;
     const valorPrevio = select.value;
     const mesesSet = new Set();
-    const nombresMeses = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+    const nombresMesesCorto = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
     ultimosGastos.forEach(g => {
         const d = new Date(g.fecha);
@@ -1665,7 +1944,7 @@ function actualizarOpcionesFiltroMes() {
     let htmlOpts = '<option value="todos">📅 Todos</option>';
     Array.from(mesesSet).sort().reverse().forEach(key => {
         const [year, month] = key.split('-');
-        const label = `${nombresMeses[parseInt(month, 10) - 1]} ${year}`;
+        const label = `${nombresMesesCorto[parseInt(month, 10) - 1]} ${year}`;
         htmlOpts += `<option value="${key}">${label}</option>`;
     });
     select.innerHTML = htmlOpts;
@@ -1740,7 +2019,6 @@ function renderListaGastosFiltrada() {
             const esTodos = !esManual && gasto.involucrados.length === participantesGrupo.length;
             const infoReparto = esManual ? ' · Manual' : (!esTodos ? ` · ${gasto.involucrados.length}p` : '');
             
-            // Colores: Piso en azul (#0a84ff), Facturas en naranja (#ff9f0a), Ocio en morado (#bf5af2)
             const catStr = gasto.categoria || '🏠 Piso';
             const iconoCat = catStr.split(' ')[0];
             const colorBordeCat = catStr.includes('Facturas') ? '#ff9f0a' : (catStr.includes('Ocio') ? '#bf5af2' : '#0a84ff');
@@ -1867,7 +2145,6 @@ document.getElementById('btnAñadirArticulo').addEventListener('click', async ()
     registrarActividad(`**${nombreUsuario}** añadió "${articulo}" a la lista de la compra.`, "🛒");
 });
 
-// Soporte para tecla Enter al añadir artículo a la compra
 document.getElementById('inputNuevoArticulo').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
         e.preventDefault();
@@ -1920,13 +2197,12 @@ document.getElementById('btnComprarSeleccionados').addEventListener('click', asy
     activarPestaña('tabGastos', 'vistaGastos');
     mostrarModoFormularioGasto(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    // Enfocar automáticamente el campo del importe para abrir el teclado numérico
     setTimeout(() => {
         document.getElementById('importeGasto').focus();
     }, 120);
 });
 
-// --- MÓDULO LIMPIEZA, CALENDARIO & SISTEMA VAR ---
+// --- MÓDULO LIMPIEZA, ROTACIÓN EQUITATIVA, CALENDARIO VISUAL & INTERCAMBIOS AISLADOS ---
 function resetFormZona() {
     idZonaEditando = null; document.getElementById('tituloFormZona').innerText = 'NUEVA ZONA';
     document.getElementById('nombreZona').value = ''; document.getElementById('frecuenciaZona').value = '1';
@@ -1971,8 +2247,199 @@ document.getElementById('btnEliminarZona').addEventListener('click', async () =>
 });
 
 function obtenerLunes(fecha) {
-    let d = new Date(fecha); let day = d.getDay(); let diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    return new Date(d.setDate(diff)).setHours(0,0,0,0);
+    let d = new Date(fecha);
+    let day = d.getDay();
+    let diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    d.setDate(diff);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+}
+
+function sumarDiasCalendario(ts, dias) {
+    let d = new Date(ts);
+    d.setDate(d.getDate() + dias);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+}
+
+function obtenerConfirmacionSemana(zona, tsLunes) {
+    const hechas = zona.semanas_hechas || {};
+    if (hechas[tsLunes] !== undefined) return hechas[tsLunes];
+    if (hechas[tsLunes - 3600000] !== undefined) return hechas[tsLunes - 3600000];
+    if (hechas[tsLunes + 3600000] !== undefined) return hechas[tsLunes + 3600000];
+    return undefined;
+}
+
+function obtenerPermutaAisladaSemana(zona, tsLunes) {
+    const permutas = zona.permutas_semana || {};
+    if (permutas[tsLunes] !== undefined) return permutas[tsLunes];
+    if (permutas[tsLunes - 3600000] !== undefined) return permutas[tsLunes - 3600000];
+    if (permutas[tsLunes + 3600000] !== undefined) return permutas[tsLunes + 3600000];
+    return undefined;
+}
+
+// Determina si una tarea es común para todos los integrantes del piso (ej. Cocina y Salón)
+function esZonaComunParaTodos(zona) {
+    if (!zona || !Array.isArray(zona.responsables) || zona.responsables.length === 0) return false;
+    if (participantesGrupo.length > 0) {
+        return zona.responsables.length >= participantesGrupo.length &&
+               participantesGrupo.every(p => zona.responsables.includes(p));
+    }
+    const maxResp = Math.max(...zonasLimpiezaCache.map(z => (z.responsables || []).length), 0);
+    return maxResp > 1 && zona.responsables.length === maxResp;
+}
+
+// Devuelve la lista de responsables de una zona común en orden canónico unificado para garantizar rotación equitativa 100% (Latín Square)
+function obtenerListaCanonicaComun(zona) {
+    if (participantesGrupo.length > 0) {
+        const filtrados = participantesGrupo.filter(p => zona.responsables.includes(p));
+        if (filtrados.length === zona.responsables.length) return filtrados;
+    }
+    return [...zona.responsables];
+}
+
+function obtenerAnclaActivaParaSemana(zona, tsLunes) {
+    const anclas = zona.anclas_turno || {};
+    const prios = zona.anclas_prio || {};
+    let mejorTs = null;
+    let personaAncla = null;
+    let prioAncla = 0;
+
+    Object.keys(anclas).forEach(k => {
+        const tsK = obtenerLunes(Number(k));
+        if (tsK <= tsLunes) {
+            if (mejorTs === null || tsK > mejorTs) {
+                mejorTs = tsK;
+                personaAncla = anclas[k];
+                prioAncla = prios[k] || tsK;
+            }
+        }
+    });
+
+    if (mejorTs !== null && zona.responsables.includes(personaAncla)) {
+        return { tsAncla: mejorTs, persona: personaAncla, prio: prioAncla };
+    }
+    return null;
+}
+
+function calcularAsignacionesParaSemana(fechaLunes, ignorarPermutasAisladas = false) {
+    const tsLunes = obtenerLunes(fechaLunes);
+    let asignacionesMap = {};
+    let zonasComunesActivas = [];
+    let indiceComunNatural = 0;
+
+    zonasLimpiezaCache.forEach((zona) => {
+        if (!zona.responsables || zona.responsables.length === 0) return;
+        const freq = zona.frecuencia || 1;
+        const tsBase = obtenerLunes(new Date(zona.fecha_base));
+        const semDesdeBase = Math.round((tsLunes - tsBase) / 604800000);
+        const ancla = obtenerAnclaActivaParaSemana(zona, tsLunes);
+
+        if (semDesdeBase < 0 && !ancla) return;
+
+        const esComun = esZonaComunParaTodos(zona);
+        const miIdxComun = esComun ? indiceComunNatural++ : 0;
+        const listaResp = esComun ? obtenerListaCanonicaComun(zona) : zona.responsables;
+
+        let idIdeal = 0;
+        if (ancla) {
+            const semDesdeAncla = Math.round((tsLunes - ancla.tsAncla) / 604800000);
+            if (semDesdeAncla < 0 || semDesdeAncla % freq !== 0) return;
+            const periodos = Math.floor(semDesdeAncla / freq);
+            const idxBase = Math.max(0, listaResp.indexOf(ancla.persona));
+            idIdeal = (idxBase + periodos) % listaResp.length;
+        } else {
+            if (semDesdeBase % freq !== 0) return;
+            const periodos = Math.floor(semDesdeBase / freq);
+            // En zonas comunes usamos listaResp canónica + miIdxComun: todos rotan exactamente las mismas veces y jamás coinciden en la misma semana
+            idIdeal = (periodos + (esComun ? miIdxComun : 0)) % listaResp.length;
+        }
+
+        if (!esComun) {
+            const toca = listaResp[idIdeal];
+            asignacionesMap[zona.id] = {
+                idZona: zona.id,
+                nombre_zona: zona.nombre_zona,
+                responsables: zona.responsables,
+                leTocaA: toca,
+                zonaRef: zona,
+                freq: freq,
+                esPermuta: false
+            };
+        } else {
+            zonasComunesActivas.push({
+                zona,
+                listaResp,
+                freq,
+                idIdeal,
+                ancla,
+                miIdxComun
+            });
+        }
+    });
+
+    // Si hay anclas manuales del Panel Maestro en zonas comunes, la zona con el ancla más reciente marca el paso canónico y las demás se desfasan equitativamente sin chocar
+    zonasComunesActivas.sort((a, b) => {
+        const aExacta = a.ancla && a.ancla.tsAncla === tsLunes ? 1 : 0;
+        const bExacta = b.ancla && b.ancla.tsAncla === tsLunes ? 1 : 0;
+        if (aExacta !== bExacta) return bExacta - aExacta;
+
+        const aTs = a.ancla ? a.ancla.tsAncla : -1;
+        const bTs = b.ancla ? b.ancla.tsAncla : -1;
+        if (aTs !== bTs) return bTs - aTs;
+
+        const aPrio = a.ancla ? a.ancla.prio : 0;
+        const bPrio = b.ancla ? b.ancla.prio : 0;
+        if (aPrio !== bPrio) return bPrio - aPrio;
+
+        return a.miIdxComun - b.miIdxComun;
+    });
+
+    let asignadosEnComunes = [];
+    zonasComunesActivas.forEach((item, idxOrden) => {
+        const { zona, listaResp, freq, idIdeal } = item;
+        // Si la primera zona común tiene un ancla maestra y esta segunda no, desfasamos respecto al índice de la primera para mantener rotación circular equitativa
+        let startIdx = idIdeal;
+        if (idxOrden > 0 && zonasComunesActivas[0].ancla && !item.ancla) {
+            startIdx = (zonasComunesActivas[0].idIdeal + idxOrden) % listaResp.length;
+        }
+
+        let toca = listaResp[startIdx];
+        for (let j = 0; j < listaResp.length; j++) {
+            const cand = listaResp[(startIdx + j) % listaResp.length];
+            if (!asignadosEnComunes.includes(cand)) {
+                toca = cand;
+                asignadosEnComunes.push(cand);
+                break;
+            }
+        }
+        asignacionesMap[zona.id] = {
+            idZona: zona.id,
+            nombre_zona: zona.nombre_zona,
+            responsables: zona.responsables,
+            leTocaA: toca,
+            zonaRef: zona,
+            freq: freq,
+            esPermuta: false
+        };
+    });
+
+    // Aplicamos al final los intercambios aislados (permutas_semana) de esa semana concreta sin alterar el orden de ninguna otra semana ni tarea
+    let resultado = [];
+    zonasLimpiezaCache.forEach(z => {
+        if (asignacionesMap[z.id]) {
+            const item = asignacionesMap[z.id];
+            if (!ignorarPermutasAisladas) {
+                const permutado = obtenerPermutaAisladaSemana(z, tsLunes);
+                if (permutado && participantesGrupo.includes(permutado)) {
+                    item.leTocaA = permutado;
+                    item.esPermuta = true;
+                }
+            }
+            resultado.push(item);
+        }
+    });
+    return resultado;
 }
 
 document.getElementById('btnGuardarZona').addEventListener('click', async () => {
@@ -2035,6 +2502,8 @@ window.votarVar = async function(idZona, timestamp, infractor, nombreZona) {
         if (votosActuales.length >= 2) {
             await updateDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZona), {
                 [`semanas_hechas.${timestamp}`]: deleteField(),
+                [`semanas_hechas.${timestamp - 3600000}`]: deleteField(),
+                [`semanas_hechas.${timestamp + 3600000}`]: deleteField(),
                 [`var_votos.${timestamp}`]: deleteField()
             });
 
@@ -2106,22 +2575,21 @@ function recalcularStrikesTotales() {
         ultimosStrikes[p] = 0;
     });
 
-    let minTime = Math.min(...zonasLimpiezaCache.map(z => new Date(z.fecha_base).getTime()));
+    let minTime = Math.min(...zonasLimpiezaCache.map(z => obtenerLunes(new Date(z.fecha_base))));
     if (zonasLimpiezaCache.length > 0 && isFinite(minTime)) {
         let t = minTime;
-        let hoy = new Date(obtenerLunes(new Date())).getTime();
+        let hoy = obtenerLunes(new Date());
         while (t < hoy) {
             let asigs = calcularAsignacionesParaSemana(new Date(t));
             asigs.forEach(a => {
-                let hechas = a.zonaRef.semanas_hechas || {};
-                let conf = hechas[t];
-                if (!conf || String(conf).includes('_Tarde')) {
+                let conf = obtenerConfirmacionSemana(a.zonaRef, t);
+                if (!conf) {
                     if (strikesAutomaticos[a.leTocaA] !== undefined) {
                         strikesAutomaticos[a.leTocaA]++;
                     }
                 }
             });
-            t += 7 * 86400000;
+            t = sumarDiasCalendario(t, 7);
         }
     }
 
@@ -2160,41 +2628,22 @@ function cargarListaLimpieza() {
     });
 }
 
-function calcularAsignacionesParaSemana(fechaLunes) {
-    let asignaciones = []; let asignados = []; 
-    zonasLimpiezaCache.forEach((zona, i) => {
-        if (!zona.responsables || zona.responsables.length === 0) return;
-        const freq = zona.frecuencia || 1;
-        let sem = Math.floor((fechaLunes.getTime() - new Date(zona.fecha_base).getTime()) / 604800000); 
-        if (sem < 0 || sem % freq !== 0) return;
-        let periodos = Math.floor(sem / freq);
-        let idIdeal = (periodos + i) % zona.responsables.length; let toca = zona.responsables[idIdeal]; let libre = false;
-        for (let j = 0; j < zona.responsables.length; j++) {
-            let cand = zona.responsables[(idIdeal + j) % zona.responsables.length];
-            if (!asignados.includes(cand)) { toca = cand; asignados.push(cand); libre = true; break; }
-        }
-        if (!libre) toca = zona.responsables[idIdeal];
-        asignaciones.push({ idZona: zona.id, nombre_zona: zona.nombre_zona, responsables: zona.responsables, leTocaA: toca, zonaRef: zona, freq: freq });
-    });
-    return asignaciones;
-}
-
 function renderVistaSemanaActual() {
     const list = document.getElementById('listaLimpieza');
     if (zonasLimpiezaCache.length === 0) return list.innerHTML = '<p style="color:var(--text-muted); text-align:center;">No hay misiones configuradas.</p>';
     
-    const tsActual = new Date(obtenerLunes(new Date())).getTime();
+    const tsActual = obtenerLunes(new Date());
     let html = '';
 
-    let minTime = Math.min(...zonasLimpiezaCache.map(z => new Date(z.fecha_base).getTime()));
+    let minTime = Math.min(...zonasLimpiezaCache.map(z => obtenerLunes(new Date(z.fecha_base))));
     if (zonasLimpiezaCache.length > 0 && isFinite(minTime)) {
         let t = minTime;
         while (t < tsActual) {
             let asigsPasadas = calcularAsignacionesParaSemana(new Date(t));
             asigsPasadas.forEach(a => {
                 if (a.leTocaA === nombreUsuario) {
-                    let hechas = a.zonaRef.semanas_hechas || {};
-                    if (!hechas[t]) {
+                    let confPasada = obtenerConfirmacionSemana(a.zonaRef, t);
+                    if (!confPasada) {
                         html += `
                             <div class="item-lista" style="background-color: rgba(255, 0, 85, 0.12); padding: 10px; border-radius: 4px; border: 2px solid var(--arcade-red); margin-bottom: 8px;">
                                 <div class="item-info">
@@ -2208,7 +2657,7 @@ function renderVistaSemanaActual() {
                     }
                 }
             });
-            t += 7 * 86400000;
+            t = sumarDiasCalendario(t, 7);
         }
     }
 
@@ -2217,10 +2666,10 @@ function renderVistaSemanaActual() {
     
     asigs.forEach(a => {
         const esMi = a.leTocaA === nombreUsuario;
-        let hechas = a.zonaRef.semanas_hechas || {}; 
-        let conf = hechas[tsActual];
+        let conf = obtenerConfirmacionSemana(a.zonaRef, tsActual);
         let estaHecha = !!conf;
         let votosVar = (a.zonaRef.var_votos && Array.isArray(a.zonaRef.var_votos[tsActual])) ? a.zonaRef.var_votos[tsActual] : [];
+        const tagPermuta = a.esPermuta ? ` <span style="font-size:0.7em; color:var(--border-highlight);">🔄</span>` : '';
         
         let botonHTML = "";
         if (estaHecha) { 
@@ -2251,7 +2700,7 @@ function renderVistaSemanaActual() {
         html += `
             <div class="item-lista ${esMi && !estaHecha ? 'mi-turno' : ''}">
                 <div class="item-info">
-                    <span class="item-titulo">${a.nombre_zona}</span>
+                    <span class="item-titulo">${a.nombre_zona}${tagPermuta}</span>
                     <span class="item-detalle">Frecuencia: cada ${a.freq == 1 ? 'semana' : a.freq + ' semanas'}</span>
                 </div>
                 <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
@@ -2267,28 +2716,130 @@ function renderVistaSemanaActual() {
     list.innerHTML = html;
 }
 
+// Genera el HTML de una cuadrícula mensual real (L a D) con píldoras de colores de los usuarios por semana
+function construirHTMLCalendarioVisual(anio, mes, opciones = {}) {
+    const {
+        interactivo = false,
+        tsSemanaBloqueada = null,
+        tsSemanaSeleccionada = null,
+        resaltesIntercambio = null // Mapa { [tsLunes]: [{ texto, color, bordeEspecial }] }
+    } = opciones;
+
+    let sem = [];
+    let pivot = new Date(obtenerLunes(new Date(anio, mes, 1)));
+    while (pivot.getMonth() === mes || (new Date(sumarDiasCalendario(pivot.getTime(), 6))).getMonth() === mes) {
+        sem.push(new Date(pivot));
+        pivot = new Date(sumarDiasCalendario(pivot.getTime(), 7));
+    }
+
+    const hoyLunes = obtenerLunes(new Date());
+    let html = `
+        <div class="cal-weekdays">
+            <span>L</span><span>M</span><span>X</span><span>J</span><span>V</span><span>S</span><span>D</span>
+        </div>
+    `;
+
+    sem.forEach(lunesDate => {
+        const tsLunes = lunesDate.getTime();
+        const esActual = tsLunes === hoyLunes;
+        const estaBloqueada = tsSemanaBloqueada !== null && tsLunes === tsSemanaBloqueada;
+        const estaSeleccionada = tsSemanaSeleccionada !== null && tsLunes === tsSemanaSeleccionada;
+
+        let clasesFila = 'cal-week-row';
+        if (esActual) clasesFila += ' cal-week-actual';
+        if (interactivo && !estaBloqueada) clasesFila += ' cal-week-clickable';
+        if (estaBloqueada) clasesFila += ' cal-week-disabled';
+        if (estaSeleccionada) clasesFila += ' cal-week-selected';
+
+        const attrClick = (interactivo && !estaBloqueada) ? `onclick="window.seleccionarSemanaSwap(${tsLunes})"` : '';
+
+        let diasHtml = '<div class="cal-days-grid">';
+        for (let dIdx = 0; dIdx < 7; dIdx++) {
+            const diaDate = new Date(sumarDiasCalendario(tsLunes, dIdx));
+            const esOtroMes = diaDate.getMonth() !== mes;
+            diasHtml += `<span class="cal-day-num ${esOtroMes ? 'otro-mes' : ''}">${diaDate.getDate()}</span>`;
+        }
+        diasHtml += '</div>';
+
+        const asigs = calcularAsignacionesParaSemana(lunesDate);
+        let pillsHtml = '<div class="cal-pills-row">';
+
+        if (resaltesIntercambio && resaltesIntercambio[tsLunes]) {
+            resaltesIntercambio[tsLunes].forEach(r => {
+                pillsHtml += `
+                    <span class="cal-task-pill" style="border-left-color: ${r.color}; border: 1px solid ${r.color}; background: rgba(255, 190, 11, 0.14);">
+                        ${r.texto}
+                    </span>`;
+            });
+        } else if (asigs.length === 0) {
+            pillsHtml += `<span style="font-size:0.7em; color:var(--text-muted);">Sin tareas</span>`;
+        } else {
+            asigs.forEach(a => {
+                const cUser = getColor(a.leTocaA);
+                const iconoSwap = a.esPermuta ? '🔄' : '';
+                pillsHtml += `
+                    <span class="cal-task-pill" style="border-left-color: ${cUser};">
+                        <span style="color:${cUser};">${getAvatar(a.leTocaA)} ${a.leTocaA}</span>: ${a.nombre_zona} ${iconoSwap}
+                    </span>`;
+            });
+        }
+        pillsHtml += '</div>';
+
+        html += `
+            <div class="${clasesFila}" ${attrClick}>
+                ${diasHtml}
+                ${pillsHtml}
+            </div>`;
+    });
+
+    // Leyenda compacta de colores de los usuarios debajo del calendario
+    if (!resaltesIntercambio && participantesGrupo.length > 0) {
+        html += `<div style="display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:8px; padding-top:6px; border-top:1px dashed #262b44; font-size:0.75em;">`;
+        participantesGrupo.forEach(p => {
+            html += `<span style="color:${getColor(p)}; font-weight:700;">● ${getAvatar(p)} ${p}</span>`;
+        });
+        html += `</div>`;
+    }
+
+    return html;
+}
+
 function renderCalendarioMensual() {
     const cont = document.getElementById('contenedorSemanasMes');
-    if (zonasLimpiezaCache.length === 0) return cont.innerHTML = '<p style="color:var(--text-muted);">No hay zonas.</p>';
-    const mes = fechaCalendario.getMonth(); const anio = fechaCalendario.getFullYear();
-    const nombres = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-    document.getElementById('textoMesAnio').innerText = `${nombres[mes]} ${anio}`;
-    let sem = []; let pivot = new Date(obtenerLunes(new Date(anio, mes, 1)));
-    while (pivot.getMonth() === mes || (new Date(pivot.getTime() + 6*86400000)).getMonth() === mes) { sem.push(new Date(pivot)); pivot = new Date(pivot.getTime() + 7 * 86400000); }
-    const hoy = new Date(obtenerLunes(new Date())).getTime();
+    const gridVisual = document.getElementById('gridCalendarioVisual');
+    if (zonasLimpiezaCache.length === 0) {
+        if (gridVisual) gridVisual.innerHTML = '<p style="color:var(--text-muted); text-align:center; margin:0;">No hay zonas.</p>';
+        return cont.innerHTML = '';
+    }
+    const mes = fechaCalendario.getMonth();
+    const anio = fechaCalendario.getFullYear();
+    document.getElementById('textoMesAnio').innerText = `${NOMBRES_MESES[mes]} ${anio}`;
+
+    if (gridVisual) {
+        gridVisual.innerHTML = construirHTMLCalendarioVisual(anio, mes, { interactivo: false });
+    }
+
+    let sem = [];
+    let pivot = new Date(obtenerLunes(new Date(anio, mes, 1)));
+    while (pivot.getMonth() === mes || (new Date(sumarDiasCalendario(pivot.getTime(), 6))).getMonth() === mes) {
+        sem.push(new Date(pivot));
+        pivot = new Date(sumarDiasCalendario(pivot.getTime(), 7));
+    }
+    const hoy = obtenerLunes(new Date());
     let htmlTotal = '';
     sem.forEach(l => {
-        const dom = new Date(l.getTime() + 6*86400000); const esHoy = l.getTime() === hoy;
+        const dom = new Date(sumarDiasCalendario(l.getTime(), 6));
+        const esHoy = l.getTime() === hoy;
         const asigsSem = calcularAsignacionesParaSemana(l);
         if(asigsSem.length === 0) return;
         
-        let html = `<div style="background:#090a10; border:${esHoy ? '2px solid var(--arcade-green)' : '2px solid #262b44'}; border-radius:4px; padding:12px; margin-bottom:12px;"><h5 style="color:var(--border-highlight); border-bottom:1px solid #262b44; padding-bottom:6px; font-size:0.7em; margin-bottom:8px;">🗓️ ${l.getDate()} ${nombres[l.getMonth()].substring(0,3)} - ${dom.getDate()} ${nombres[dom.getMonth()].substring(0,3)} ${esHoy ? '<span style="background:var(--arcade-green); color:#000; padding:2px 5px; border-radius:2px; font-size:0.85em; margin-left:4px;">ACTUAL</span>' : ''}</h5>`;
+        let html = `<div style="background:#090a10; border:${esHoy ? '2px solid var(--arcade-green)' : '2px solid #262b44'}; border-radius:4px; padding:12px; margin-bottom:12px;"><h5 style="color:var(--border-highlight); border-bottom:1px solid #262b44; padding-bottom:6px; font-size:0.7em; margin-bottom:8px;">🗓️ ${l.getDate()} ${NOMBRES_MESES[l.getMonth()].substring(0,3)} - ${dom.getDate()} ${NOMBRES_MESES[dom.getMonth()].substring(0,3)} ${esHoy ? '<span style="background:var(--arcade-green); color:#000; padding:2px 5px; border-radius:2px; font-size:0.85em; margin-left:4px;">ACTUAL</span>' : ''}</h5>`;
         asigsSem.forEach(a => {
             const esM = a.leTocaA === nombreUsuario; 
-            let hechas = a.zonaRef.semanas_hechas || {}; 
-            let conf = hechas[l.getTime()]; 
+            let conf = obtenerConfirmacionSemana(a.zonaRef, l.getTime()); 
             let check = conf ? (String(conf).includes('_Tarde') ? '☑️ ' : '✅ ') : '';
-            html += `<div style="display:flex; justify-content:space-between; margin-bottom:6px; ${esM && !conf ? 'background: rgba(46, 196, 182, 0.12); padding: 4px 8px; border-radius: 2px; border-left: 3px solid var(--arcade-green);' : 'padding: 4px 8px;'}"><span style="font-weight:600;">${a.nombre_zona}</span><span style="color:${esM && !conf ? 'var(--arcade-yellow)' : getColor(a.leTocaA)}; font-weight:700;">${check}${esM ? '¡Te toca!' : getAvatar(a.leTocaA) + ' ' + a.leTocaA}</span></div>`;
+            const tagSwap = a.esPermuta ? ' 🔄' : '';
+            html += `<div style="display:flex; justify-content:space-between; margin-bottom:6px; ${esM && !conf ? 'background: rgba(46, 196, 182, 0.12); padding: 4px 8px; border-radius: 2px; border-left: 3px solid var(--arcade-green);' : 'padding: 4px 8px;'}"><span style="font-weight:600;">${a.nombre_zona}${tagSwap}</span><span style="color:${esM && !conf ? 'var(--arcade-yellow)' : getColor(a.leTocaA)}; font-weight:700;">${check}${esM ? '¡Te toca!' : getAvatar(a.leTocaA) + ' ' + a.leTocaA}</span></div>`;
         });
         htmlTotal += html + `</div>`;
     });
@@ -2303,6 +2854,360 @@ document.getElementById('btnToggleCalendario').addEventListener('click', () => {
 
 document.getElementById('btnMesAnterior').addEventListener('click', () => { window.playRetroSound('blip'); fechaCalendario = new Date(fechaCalendario.getFullYear(), fechaCalendario.getMonth() - 1, 1); renderCalendarioMensual(); });
 document.getElementById('btnMesSiguiente').addEventListener('click', () => { window.playRetroSound('blip'); fechaCalendario = new Date(fechaCalendario.getFullYear(), fechaCalendario.getMonth() + 1, 1); renderCalendarioMensual(); });
+
+// --- ASISTENTE FLOTANTE DE INTERCAMBIO DE TAREAS EN 4 PASOS ---
+function formatearRangoSemana(tsLunes) {
+    const dLun = new Date(tsLunes);
+    const dDom = new Date(sumarDiasCalendario(tsLunes, 6));
+    return `${dLun.getDate()} ${NOMBRES_MESES[dLun.getMonth()].substring(0, 3)} - ${dDom.getDate()} ${NOMBRES_MESES[dDom.getMonth()].substring(0, 3)}`;
+}
+
+document.getElementById('btnAbrirIntercambio').addEventListener('click', async () => {
+    if (zonasLimpiezaCache.length === 0) {
+        return await window.mostrarAlerta("Sin tareas", "Primero debéis crear al menos una zona de limpieza.");
+    }
+    window.playRetroSound('blip');
+    swapState = {
+        paso: 1,
+        fechaMes: new Date(),
+        tsSemanaOrigen: null,
+        idZonaOrigen: null,
+        nombreZonaOrigen: "",
+        tsSemanaDestino: null,
+        idZonaDestino: null,
+        nombreZonaDestino: "",
+        destinatario: ""
+    };
+    renderPasoAsistenteSwap();
+    document.body.style.overflow = 'hidden';
+    document.getElementById('modalIntercambioOverlay').classList.remove('hidden');
+});
+
+document.getElementById('btnCerrarIntercambio').addEventListener('click', () => {
+    window.playRetroSound('blip');
+    document.body.style.overflow = 'auto';
+    document.getElementById('modalIntercambioOverlay').classList.add('hidden');
+});
+
+document.getElementById('btnSwapMesAnt').addEventListener('click', () => {
+    window.playRetroSound('blip');
+    swapState.fechaMes = new Date(swapState.fechaMes.getFullYear(), swapState.fechaMes.getMonth() - 1, 1);
+    renderCalendarioAsistenteSwap();
+});
+
+document.getElementById('btnSwapMesSig').addEventListener('click', () => {
+    window.playRetroSound('blip');
+    swapState.fechaMes = new Date(swapState.fechaMes.getFullYear(), swapState.fechaMes.getMonth() + 1, 1);
+    renderCalendarioAsistenteSwap();
+});
+
+function renderCalendarioAsistenteSwap() {
+    const mes = swapState.fechaMes.getMonth();
+    const anio = swapState.fechaMes.getFullYear();
+    document.getElementById('textoSwapMesAnio').innerText = `${NOMBRES_MESES[mes]} ${anio}`;
+
+    const gridEl = document.getElementById('swapGridSemanas');
+    gridEl.innerHTML = construirHTMLCalendarioVisual(anio, mes, {
+        interactivo: true,
+        tsSemanaBloqueada: swapState.paso === 3 ? swapState.tsSemanaOrigen : null,
+        tsSemanaSeleccionada: swapState.paso === 1 ? swapState.tsSemanaOrigen : swapState.tsSemanaDestino
+    });
+}
+
+function renderPasoAsistenteSwap() {
+    const ind = document.getElementById('swapPasoIndicador');
+    const inst = document.getElementById('swapInstruccionTexto');
+    const calBox = document.getElementById('swapCalendarioBox');
+    const selBox = document.getElementById('swapSelectorBox');
+    const btnAtras = document.getElementById('btnSwapAtras');
+    const btnConf = document.getElementById('btnSwapConfirmarPaso');
+    const resumenEl = document.getElementById('swapResumenSeleccionPrevia');
+    const labelSel = document.getElementById('swapLabelSelect');
+    const selectEl = document.getElementById('swapSelectTarea');
+
+    ind.innerText = `PASO ${swapState.paso} DE 4`;
+
+    if (swapState.paso === 1) {
+        inst.innerText = "1º. Toca en el calendario la semana donde tienes la tarea que quieres cambiar:";
+        calBox.classList.remove('hidden');
+        selBox.classList.add('hidden');
+        btnAtras.classList.add('hidden');
+        btnConf.classList.add('hidden');
+        renderCalendarioAsistenteSwap();
+    } else if (swapState.paso === 2) {
+        inst.innerText = "2º. Elige qué tarea tuya de esa semana quieres intercambiar:";
+        calBox.classList.add('hidden');
+        selBox.classList.remove('hidden');
+        btnAtras.classList.remove('hidden');
+        btnConf.classList.remove('hidden');
+        btnConf.innerText = "CONFIRMAR SELECCIÓN";
+
+        resumenEl.innerHTML = `📅 <b>Tu semana elegida:</b> ${formatearRangoSemana(swapState.tsSemanaOrigen)}`;
+        labelSel.innerText = "Tus tareas asignadas en esa semana:";
+
+        const misTareas = calcularAsignacionesParaSemana(new Date(swapState.tsSemanaOrigen))
+            .filter(a => a.leTocaA === nombreUsuario);
+
+        let htmlOpts = '';
+        misTareas.forEach(t => {
+            htmlOpts += `<option value="${t.idZona}">${t.nombre_zona}</option>`;
+        });
+        selectEl.innerHTML = htmlOpts;
+    } else if (swapState.paso === 3) {
+        inst.innerText = "3º. Ahora toca en el calendario la semana por la que te quieres cambiar (tu semana original sale en gris):";
+        calBox.classList.remove('hidden');
+        selBox.classList.add('hidden');
+        btnAtras.classList.remove('hidden');
+        btnConf.classList.add('hidden');
+        renderCalendarioAsistenteSwap();
+    } else if (swapState.paso === 4) {
+        inst.innerText = "4º. Elige por qué tarea y compañero de esa semana quieres intercambiar la tuya:";
+        calBox.classList.add('hidden');
+        selBox.classList.remove('hidden');
+        btnAtras.classList.remove('hidden');
+        btnConf.classList.remove('hidden');
+        btnConf.innerText = "ENVIAR SOLICITUD";
+
+        resumenEl.innerHTML = `
+            <div>📤 <b>Cedes:</b> ${swapState.nombreZonaOrigen} (${formatearRangoSemana(swapState.tsSemanaOrigen)})</div>
+            <div style="margin-top:4px;">📥 <b>Semana destino:</b> ${formatearRangoSemana(swapState.tsSemanaDestino)}</div>
+        `;
+        labelSel.innerText = "Tareas de tus compañeros en esa semana:";
+
+        const tareasCompis = calcularAsignacionesParaSemana(new Date(swapState.tsSemanaDestino))
+            .filter(a => a.leTocaA !== nombreUsuario);
+
+        let htmlOpts = '';
+        tareasCompis.forEach(t => {
+            htmlOpts += `<option value="${t.idZona}|${t.leTocaA}|${t.nombre_zona}">${t.nombre_zona} — ${getAvatar(t.leTocaA)} ${t.leTocaA}</option>`;
+        });
+        selectEl.innerHTML = htmlOpts;
+    }
+}
+
+window.seleccionarSemanaSwap = async function(tsLunes) {
+    window.playRetroSound('blip');
+    if (swapState.paso === 1) {
+        const misTareas = calcularAsignacionesParaSemana(new Date(tsLunes))
+            .filter(a => a.leTocaA === nombreUsuario);
+
+        if (misTareas.length === 0) {
+            return await window.mostrarAlerta("Sin tareas tuyas", "En la semana seleccionada no tienes ninguna tarea de limpieza asignada.");
+        }
+        swapState.tsSemanaOrigen = tsLunes;
+        swapState.paso = 2;
+        renderPasoAsistenteSwap();
+    } else if (swapState.paso === 3) {
+        if (tsLunes === swapState.tsSemanaOrigen) return;
+        const tareasCompis = calcularAsignacionesParaSemana(new Date(tsLunes))
+            .filter(a => a.leTocaA !== nombreUsuario);
+
+        if (tareasCompis.length === 0) {
+            return await window.mostrarAlerta("Sin compañeros disponibles", "En esa semana no hay tareas asignadas a otros compañeros.");
+        }
+        swapState.tsSemanaDestino = tsLunes;
+        swapState.paso = 4;
+        renderPasoAsistenteSwap();
+    }
+};
+
+document.getElementById('btnSwapAtras').addEventListener('click', () => {
+    window.playRetroSound('blip');
+    if (swapState.paso > 1) {
+        swapState.paso -= 1;
+        renderPasoAsistenteSwap();
+    }
+});
+
+document.getElementById('btnSwapConfirmarPaso').addEventListener('click', async () => {
+    const selectEl = document.getElementById('swapSelectTarea');
+    if (!selectEl.value) return;
+
+    if (swapState.paso === 2) {
+        window.playRetroSound('blip');
+        const idZ = selectEl.value;
+        const zObj = zonasLimpiezaCache.find(z => z.id === idZ);
+        swapState.idZonaOrigen = idZ;
+        swapState.nombreZonaOrigen = zObj ? zObj.nombre_zona : "Tarea";
+        swapState.paso = 3;
+        renderPasoAsistenteSwap();
+    } else if (swapState.paso === 4) {
+        const [idZDest, compDest, nomZDest] = selectEl.value.split('|');
+        swapState.idZonaDestino = idZDest;
+        swapState.destinatario = compDest;
+        swapState.nombreZonaDestino = nomZDest;
+
+        const btn = document.getElementById('btnSwapConfirmarPaso');
+        btn.disabled = true;
+        btn.innerText = "ENVIANDO...";
+
+        try {
+            await addDoc(collection(db, "grupos", idPisoActual, "solicitudes_intercambio"), {
+                solicitante: nombreUsuario,
+                destinatario: swapState.destinatario,
+                idZonaOrigen: swapState.idZonaOrigen,
+                nombreZonaOrigen: swapState.nombreZonaOrigen,
+                tsSemanaOrigen: swapState.tsSemanaOrigen,
+                idZonaDestino: swapState.idZonaDestino,
+                nombreZonaDestino: swapState.nombreZonaDestino,
+                tsSemanaDestino: swapState.tsSemanaDestino,
+                estado: 'pendiente',
+                fecha: Date.now()
+            });
+
+            window.playRetroSound('powerup');
+            await registrarActividad(
+                `🔄 **${nombreUsuario}** solicitó intercambiar "${swapState.nombreZonaOrigen}" (${formatearRangoSemana(swapState.tsSemanaOrigen)}) con **${swapState.destinatario}** por "${swapState.nombreZonaDestino}" (${formatearRangoSemana(swapState.tsSemanaDestino)}).`,
+                "🔄"
+            );
+
+            document.body.style.overflow = 'auto';
+            document.getElementById('modalIntercambioOverlay').classList.add('hidden');
+            await window.mostrarAlerta("Solicitud enviada", `Se ha enviado la propuesta a ${swapState.destinatario}. Podrá aceptarla o rechazarla desde el icono de la campana (🔔).`);
+        } catch (e) {
+            console.error(e);
+            await window.mostrarAlerta("Error", "No se pudo enviar la solicitud de intercambio.");
+        } finally {
+            btn.disabled = false;
+        }
+    }
+});
+
+// --- BUZÓN DE SOLICITUDES DE INTERCAMBIO (EN LA CAMPANA 🔔) ---
+function cargarSolicitudesIntercambio() {
+    if (unsubSolicitudes) unsubSolicitudes();
+    const q = query(collection(db, "grupos", idPisoActual, "solicitudes_intercambio"), orderBy("fecha", "desc"));
+
+    unsubSolicitudes = onSnapshot(q, (snap) => {
+        solicitudesIntercambioCache = [];
+        snap.forEach(d => {
+            const data = d.data();
+            data.id = d.id;
+            solicitudesIntercambioCache.push(data);
+        });
+        verificarBadgeHistorial();
+        if (!document.getElementById('vistaHistorial').classList.contains('hidden') &&
+            !document.getElementById('seccionBuzonSolicitudes').classList.contains('hidden')) {
+            renderBuzonSolicitudes();
+        }
+    });
+}
+
+function renderBuzonSolicitudes() {
+    const cont = document.getElementById('listaSolicitudesIntercambio');
+    if (!cont) return;
+
+    const pendientes = solicitudesIntercambioCache.filter(s => s.estado === 'pendiente');
+    if (pendientes.length === 0) {
+        cont.innerHTML = '<div class="card"><p style="color:var(--text-muted); text-align:center; margin: 8px 0;">No hay solicitudes de intercambio pendientes.</p></div>';
+        return;
+    }
+
+    let html = '';
+    pendientes.forEach(sol => {
+        const esParaMi = sol.destinatario === nombreUsuario;
+        const esMia = sol.solicitante === nombreUsuario;
+        const dMes = new Date(sol.tsSemanaOrigen);
+
+        // Construimos un mapa de resaltes visuales para el calendario de la solicitud
+        const resaltes = {};
+        resaltes[sol.tsSemanaOrigen] = [
+            {
+                texto: `🔄 ${sol.nombreZonaOrigen}: pasa a ${getAvatar(sol.destinatario)} ${sol.destinatario}`,
+                color: getColor(sol.destinatario)
+            }
+        ];
+        resaltes[sol.tsSemanaDestino] = [
+            {
+                texto: `🔄 ${sol.nombreZonaDestino}: pasa a ${getAvatar(sol.solicitante)} ${sol.solicitante}`,
+                color: getColor(sol.solicitante)
+            }
+        ];
+
+        const calHTML = construirHTMLCalendarioVisual(dMes.getFullYear(), dMes.getMonth(), {
+            interactivo: false,
+            resaltesIntercambio: resaltes
+        });
+
+        let botonesAccion = '';
+        if (esParaMi) {
+            botonesAccion = `
+                <div style="display:flex; gap:8px; margin-top:12px;">
+                    <button type="button" style="margin:0; flex:1; background:var(--arcade-green); color:#000;" onclick="responderSolicitudIntercambio('${sol.id}', true)">✅ ACEPTAR</button>
+                    <button type="button" class="btn-rojo-arcade" style="margin:0; flex:1;" onclick="responderSolicitudIntercambio('${sol.id}', false)">❌ RECHAZAR</button>
+                </div>`;
+        } else if (esMia) {
+            botonesAccion = `
+                <div style="margin-top:10px;">
+                    <button type="button" class="btn-secundario" style="margin:0; padding:8px; font-size:8.5px;" onclick="responderSolicitudIntercambio('${sol.id}', false, true)">🗑️ CANCELAR MI SOLICITUD</button>
+                </div>`;
+        } else {
+            botonesAccion = `<p style="font-size:0.78em; color:var(--text-muted); text-align:center; margin:8px 0 0 0;">Esperando respuesta de ${sol.destinatario}...</p>`;
+        }
+
+        html += `
+            <div class="card" style="border-color: ${esParaMi ? 'var(--arcade-yellow)' : 'var(--border-color)'};">
+                <div style="font-family:var(--font-pixel); font-size:0.62em; color:var(--arcade-yellow); margin-bottom:8px;">
+                    ${esParaMi ? '📥 SOLICITUD PARA TI' : '📤 PROPUESTA EN CURSO'}
+                </div>
+                <div style="font-size:0.92em; line-height:1.4; margin-bottom:10px;">
+                    <b style="color:${getColor(sol.solicitante)};">${getAvatar(sol.solicitante)} ${sol.solicitante}</b> propone cambiar su turno de 
+                    <b>${sol.nombreZonaOrigen}</b> (${formatearRangoSemana(sol.tsSemanaOrigen)}) por el turno de 
+                    <b>${sol.nombreZonaDestino}</b> (${formatearRangoSemana(sol.tsSemanaDestino)}) de 
+                    <b style="color:${getColor(sol.destinatario)};">${getAvatar(sol.destinatario)} ${sol.destinatario}</b>.
+                </div>
+                <div style="font-size:0.75em; color:var(--border-highlight); margin-bottom:6px; font-weight:700;">
+                    📅 Vista previa de los cambios sugeridos (${NOMBRES_MESES[dMes.getMonth()]}):
+                </div>
+                ${calHTML}
+                ${botonesAccion}
+            </div>
+        `;
+    });
+
+    cont.innerHTML = html;
+}
+
+window.responderSolicitudIntercambio = async function(idSolicitud, aceptar, esCancelacion = false) {
+    const sol = solicitudesIntercambioCache.find(s => s.id === idSolicitud);
+    if (!sol) return;
+
+    try {
+        if (aceptar) {
+            const batch = writeBatch(db);
+            // Aplicamos las dos permutas aisladas: no mueven la rotación de ninguna otra semana
+            const refOrigen = doc(db, "grupos", idPisoActual, "zonas_limpieza", sol.idZonaOrigen);
+            const refDestino = doc(db, "grupos", idPisoActual, "zonas_limpieza", sol.idZonaDestino);
+
+            batch.update(refOrigen, {
+                [`permutas_semana.${sol.tsSemanaOrigen}`]: sol.destinatario
+            });
+            batch.update(refDestino, {
+                [`permutas_semana.${sol.tsSemanaDestino}`]: sol.solicitante
+            });
+            batch.delete(doc(db, "grupos", idPisoActual, "solicitudes_intercambio", sol.id));
+
+            await batch.commit();
+            window.playRetroSound('powerup');
+            await registrarActividad(
+                `🤝 **${sol.destinatario}** aceptó el intercambio con **${sol.solicitante}**: "${sol.nombreZonaOrigen}" (${formatearRangoSemana(sol.tsSemanaOrigen)}) ⇄ "${sol.nombreZonaDestino}" (${formatearRangoSemana(sol.tsSemanaDestino)}).`,
+                "✅"
+            );
+            await window.mostrarAlerta("¡Intercambio completado!", "Se han actualizado los turnos de esas dos semanas sin alterar el resto del calendario.");
+        } else {
+            await deleteDoc(doc(db, "grupos", idPisoActual, "solicitudes_intercambio", sol.id));
+            window.playRetroSound('hit');
+            if (esCancelacion) {
+                await registrarActividad(`**${nombreUsuario}** canceló su solicitud de intercambio de tareas.`, "🗑️");
+            } else {
+                await registrarActividad(`❌ **${nombreUsuario}** rechazó la solicitud de intercambio de **${sol.solicitante}**.`, "❌");
+            }
+        }
+    } catch (e) {
+        console.error(e);
+        await window.mostrarAlerta("Error", "No se pudo procesar la solicitud.");
+    }
+};
 
 // --- MÓDULO TABLÓN (INFO) ---
 function cargarTablon(tablon) {
@@ -2594,6 +3499,7 @@ document.getElementById('btnVolverMenu').addEventListener('click', () => {
     if(typeof unsubCompra !== 'undefined' && unsubCompra) unsubCompra(); 
     if(typeof unsubLimpieza !== 'undefined' && unsubLimpieza) unsubLimpieza();
     if(typeof unsubHistorial !== 'undefined' && unsubHistorial) unsubHistorial();
+    if(typeof unsubSolicitudes !== 'undefined' && unsubSolicitudes) unsubSolicitudes();
     localStorage.removeItem('ultimoPisoActivo'); 
     window.location.reload(); 
 });
