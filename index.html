@@ -183,6 +183,57 @@
             flex-shrink: 0;
         }
 
+        /* Cabecera del Historial de Gastos a prueba de móviles */
+        .gastos-historial-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: nowrap;
+        }
+
+        .gastos-historial-title {
+            margin: 0;
+            font-size: 0.68em;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            flex-shrink: 0;
+        }
+
+        .gastos-historial-controls {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            flex-shrink: 0;
+        }
+
+        #filtroMesGastos {
+            width: auto;
+            margin: 0;
+            padding: 0 22px 0 8px;
+            font-size: 0.78em;
+            height: 28px;
+            line-height: 28px;
+            white-space: nowrap;
+        }
+
+        #btnToggleVisibilidadGastos {
+            width: auto;
+            margin: 0;
+            padding: 0 8px;
+            font-size: 7.5px;
+            height: 28px;
+            line-height: 1;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            box-shadow: none;
+        }
+
         /* Plantillas rápidas de 1 clic */
         .plantillas-grid {
             display: grid;
@@ -346,7 +397,7 @@
             border: 1px solid var(--arcade-yellow);
         }
 
-        /* Calendario Mensual Real por Cuadrícula (7 columnas L-D + Barra de Turnos por Color) */
+        /* Calendario Mensual Real por Cuadrícula (7 columnas L-D + Fila Única Centrada de Tareas) */
         .cal-visual-box {
             background: #090a10;
             border: 2px solid var(--border-color);
@@ -360,25 +411,29 @@
             grid-template-columns: repeat(7, 1fr);
             text-align: center;
             font-family: var(--font-pixel);
-            font-size: 7.5px;
-            color: var(--text-muted);
-            padding-bottom: 6px;
+            font-size: 8px;
+            color: var(--arcade-yellow);
+            padding-bottom: 8px;
             border-bottom: 1px solid #262b44;
-            margin-bottom: 6px;
+            margin-bottom: 8px;
         }
 
         .cal-week-row {
             background: #121524;
             border: 2px solid #262b44;
             border-radius: 4px;
-            margin-bottom: 6px;
-            padding: 5px 4px;
+            margin-bottom: 8px;
+            padding: 6px;
             transition: transform 0.1s, border-color 0.1s;
+        }
+
+        .cal-week-row:last-of-type {
+            margin-bottom: 4px;
         }
 
         .cal-week-row.cal-week-actual {
             border-color: var(--arcade-green);
-            background: rgba(46, 196, 182, 0.08);
+            background: rgba(46, 196, 182, 0.09);
         }
 
         .cal-week-row.cal-week-clickable {
@@ -407,9 +462,11 @@
             display: grid;
             grid-template-columns: repeat(7, 1fr);
             text-align: center;
-            font-size: 0.82em;
+            font-size: 0.88em;
             font-weight: 700;
-            margin-bottom: 4px;
+            margin-bottom: 6px;
+            padding-bottom: 4px;
+            border-bottom: 1px dashed rgba(57, 65, 104, 0.5);
         }
 
         .cal-day-num {
@@ -422,28 +479,51 @@
             font-weight: 500;
         }
 
+        /* Fila única igualada y centrada para las tareas de cada semana */
         .cal-pills-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 4px;
-            padding: 2px 2px 0 2px;
+            display: grid;
+            grid-auto-flow: column;
+            grid-auto-columns: 1fr;
+            gap: 5px;
+            width: 100%;
+            align-items: stretch;
         }
 
         .cal-task-pill {
-            font-size: 0.7em;
-            font-weight: 700;
-            padding: 2px 6px;
-            border-radius: 3px;
             background: #090a10;
-            border-left: 3px solid var(--border-highlight);
-            color: var(--text-main);
-            display: inline-flex;
+            border: 1px solid #2a3152;
+            border-top: 3px solid var(--border-highlight);
+            border-radius: 4px;
+            padding: 5px 4px;
+            display: flex;
+            flex-direction: column;
             align-items: center;
-            gap: 4px;
-            max-width: 100%;
+            justify-content: center;
+            text-align: center;
+            gap: 2px;
+            min-width: 0;
+            box-sizing: border-box;
+        }
+
+        .cal-pill-zone {
+            font-size: 0.76em;
+            font-weight: 700;
+            color: var(--text-main);
+            white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            width: 100%;
+            line-height: 1.2;
+        }
+
+        .cal-pill-user {
+            font-size: 0.8em;
+            font-weight: 700;
             white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+            line-height: 1.2;
         }
 
         /* Listas e Items */
@@ -921,7 +1001,7 @@
         <!-- VISTAS PRINCIPALES -->
         <div id="vistasPrincipales">
             
-            <!-- VISTA: GASTOS (REORGANIZADA EN TARJETAS LIMPIAS + PLEGAR/DESPLEGAR HISTORIAL) -->
+            <!-- VISTA: GASTOS (CABECERA DEL HISTORIAL ALINEADA EN MÓVIL Y PC) -->
             <div id="vistaGastos">
                 
                 <button id="btnMostrarFormGasto" style="margin-bottom: 14px;">+ AÑADIR GASTO</button>
@@ -978,19 +1058,19 @@
                     <div id="listaDeudas" style="margin-top: 10px;"></div>
                 </div>
                 
-                <!-- TARJETA 2: HISTORIAL DE GASTOS CON OPCIÓN DE OCULTAR/DESPLEGAR -->
+                <!-- TARJETA 2: HISTORIAL DE GASTOS CON CABECERA EN LÍNEA RECTA -->
                 <div id="listaGastosContenedor" class="card">
-                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 6px;">
-                        <h4 style="margin: 0;">📜 HISTORIAL</h4>
-                        <div style="display: flex; align-items: center; gap: 6px;">
-                            <select id="filtroMesGastos" style="width: auto; margin: 0; padding: 4px 8px; font-size: 0.82em; height: 30px;">
+                    <div class="gastos-historial-header">
+                        <h4 class="gastos-historial-title">📜 HISTORIAL</h4>
+                        <div class="gastos-historial-controls">
+                            <select id="filtroMesGastos">
                                 <option value="todos">📅 Todos</option>
                             </select>
-                            <button type="button" id="btnToggleVisibilidadGastos" class="btn-secundario" style="width: auto; margin: 0; padding: 5px 8px; font-size: 8px; height: 30px; box-shadow: none;">▲ OCULTAR</button>
+                            <button type="button" id="btnToggleVisibilidadGastos" class="btn-secundario">▲ OCULTAR</button>
                         </div>
                     </div>
 
-                    <div id="cuerpoHistorialGastos" style="margin-top: 8px;">
+                    <div id="cuerpoHistorialGastos" style="margin-top: 10px;">
                         <p style="font-size: 0.75em; color: var(--text-muted); margin: 0 0 8px 0;">Toca cualquier gasto de la lista para editarlo o borrarlo.</p>
                         
                         <div id="listaGastos">Cargando...</div>
@@ -1020,8 +1100,8 @@
             <!-- VISTA: LIMPIEZA -->
             <div id="vistaLimpieza" class="card hidden">
                 <button type="button" id="btnMostrarFormZona">+ NUEVA ZONA</button>
-                <!-- BOTÓN ROJO PARA INTERCAMBIAR TAREAS JUSTO DEBAJO DE NUEVA ZONA -->
-                <button type="button" id="btnAbrirIntercambio" class="btn-rojo-arcade">🔄 INTERCAMBIAR TAREAS</button>
+                <!-- BOTÓN PARA INTERCAMBIAR TAREAS CON EL MISMO COLOR QUE NUEVA ZONA -->
+                <button type="button" id="btnAbrirIntercambio">🔄 INTERCAMBIAR TAREAS</button>
                 
                 <div id="formZona" class="hidden" style="background: #090a10; padding: 14px; border-radius: 4px; margin-bottom: 18px; border: 2px solid var(--border-highlight);">
                     <h4 id="tituloFormZona">NUEVA ZONA</h4>
@@ -1059,7 +1139,7 @@
                             <button type="button" id="btnMesSiguiente" style="background: none; border: none; box-shadow: none; color: var(--arcade-yellow); font-size: 1.1em; width:auto; padding:4px; margin:0;">▶</button>
                         </div>
 
-                        <!-- NUEVO CALENDARIO VISUAL REAL ARRIBA (POR COLORES DE USUARIO) -->
+                        <!-- CALENDARIO VISUAL REAL ARRIBA (TAREAS IGUALADAS EN 1 FILA Y CENTRADAS) -->
                         <div id="gridCalendarioVisual" class="cal-visual-box"></div>
 
                         <!-- DESGLOSE SEMANA A SEMANA DEBAJO AL HACER SCROLL -->
