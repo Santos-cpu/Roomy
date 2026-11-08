@@ -83,6 +83,13 @@ let chartJsCargado = false;
 let chartMisGastosObj = null;
 let chartPisoGastosObj = null;
 
+// Caché en memoria para la simulación inteligente de turnos
+let cacheSimulacionTurnos = {
+    firma: "",
+    maxTsCalculado: 0,
+    porSemana: {}
+};
+
 // Estado del Asistente de Intercambio de Tareas (4 pasos)
 let swapState = {
     paso: 1,
@@ -1304,7 +1311,7 @@ document.getElementById('btnMasterGuardarTurno').addEventListener('click', async
         await updateDoc(doc(db, "grupos", idPisoActual, "zonas_limpieza", idZona), updateData);
         window.playRetroSound('powerup');
         const fechaStr = new Date(tsSemana).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
-        await window.mostrarAlerta("Turno Actualizado", `En la semana del ${fechaStr}, "${zonaObj.nombre_zona}" pasa a ${nuevoResp} y las semanas siguientes rotan en orden.`);
+        await window.mostrarAlerta("Turno Actualizado", `En la semana del ${fechaStr}, "${zonaObj.nombre_zona}" pasa a ${nuevoResp} y las semanas siguientes se han reequilibrado automáticamente.`);
     } catch (e) {
         console.error(e);
         await window.mostrarAlerta("Error", "No se pudo aplicar el cambio de turno.");
@@ -2200,7 +2207,7 @@ document.getElementById('btnComprarSeleccionados').addEventListener('click', asy
     }, 120);
 });
 
-// --- MÓDULO LIMPIEZA, ROTACIÓN EQUITATIVA, CALENDARIO VISUAL CENTRADO & INTERCAMBIOS AISLADOS ---
+// --- MÓDULO LIMPIEZA: NUEVO MOTOR INTELIGENTE (EQUIDAD 100% + MÍNIMA COINCIDENCIA SEMANAL) ---
 function resetFormZona() {
     idZonaEditando = null; document.getElementById('tituloFormZona').innerText = 'NUEVA ZONA';
     document.getElementById('nombreZona').value = ''; document.getElementById('frecuenciaZona').value = '1';
@@ -2276,6 +2283,14 @@ function obtenerPermutaAisladaSemana(zona, tsLunes) {
     return undefined;
 }
 
+function obtenerAnclaExactaSemana(zona, tsLunes) {
+    const anclas = zona.anclas_turno || {};
+    if (anclas[tsLunes] !== undefined) return anclas[tsLunes];
+    if (anclas[tsLunes - 3600000] !== undefined) return anclas[tsLunes - 3600000];
+    if (anclas[tsLunes + 3600000] !== undefined) return anclas[tsLunes + 3600000];
+    return undefined;
+}
+
 function esZonaComunParaTodos(zona) {
     if (!zona || !Array.isArray(zona.responsables) || zona.responsables.length === 0) return false;
     if (participantesGrupo.length > 0) {
@@ -2286,151 +2301,247 @@ function esZonaComunParaTodos(zona) {
     return maxResp > 1 && zona.responsables.length === maxResp;
 }
 
-function obtenerListaCanonicaComun(zona) {
+function obtenerListaCanonica(zona) {
     if (participantesGrupo.length > 0) {
-        const filtrados = participantesGrupo.filter(p => zona.responsables.includes(p));
-        if (filtrados.length === zona.responsables.length) return filtrados;
+        const filtrados = participantesGrupo.filter(p => (zona.responsables || []).includes(p));
+        if (filtrados.length === (zona.responsables || []).length && filtrados.length > 0) {
+            return filtrados;
+        }
     }
-    return [...zona.responsables];
+    return [...(zona.responsables || [])];
 }
 
-function obtenerAnclaActivaParaSemana(zona, tsLunes) {
-    const anclas = zona.anclas_turno || {};
-    const prios = zona.anclas_prio || {};
-    let mejorTs = null;
-    let personaAncla = null;
-    let prioAncla = 0;
+// MOTOR DE SIMULACIÓN ACUMULADA:
+// Garantiza que dentro de cada zona (común o parcial) todos limpien exactamente el mismo número de veces,
+// pero en cada semana elige, de entre los que empatan a menos limpiezas en esa zona, a quien NO tenga ya otra tarea esa semana.
+function construirCalendarioRotacionInteligente(tsHastaObjetivo) {
+    const tsHoy = obtenerLunes(new Date());
+    const tsMax = Math.max(tsHastaObjetivo, sumarDiasCalendario(tsHoy, 52 * 7));
 
-    Object.keys(anclas).forEach(k => {
-        const tsK = obtenerLunes(Number(k));
-        if (tsK <= tsLunes) {
-            if (mejorTs === null || tsK > mejorTs) {
-                mejorTs = tsK;
-                personaAncla = anclas[k];
-                prioAncla = prios[k] || tsK;
-            }
-        }
+    const firmaActual = JSON.stringify({
+        p: participantesGrupo,
+        z: zonasLimpiezaCache.map(z => ({
+            id: z.id,
+            n: z.nombre_zona,
+            r: z.responsables,
+            f: z.frecuencia,
+            fb: z.fecha_base,
+            a: z.anclas_turno,
+            ap: z.anclas_prio
+        }))
     });
 
-    if (mejorTs !== null && zona.responsables.includes(personaAncla)) {
-        return { tsAncla: mejorTs, persona: personaAncla, prio: prioAncla };
+    if (cacheSimulacionTurnos.firma === firmaActual && cacheSimulacionTurnos.maxTsCalculado >= tsHastaObjetivo) {
+        return cacheSimulacionTurnos.porSemana;
     }
-    return null;
+
+    const porSemana = {};
+    if (zonasLimpiezaCache.length === 0) {
+        cacheSimulacionTurnos = { firma: firmaActual, maxTsCalculado: tsMax, porSemana };
+        return porSemana;
+    }
+
+    let minTime = Infinity;
+    zonasLimpiezaCache.forEach(z => {
+        const tb = obtenerLunes(new Date(z.fecha_base));
+        if (isFinite(tb) && tb < minTime) minTime = tb;
+        Object.keys(z.anclas_turno || {}).forEach(k => {
+            const tk = obtenerLunes(Number(k));
+            if (isFinite(tk) && tk < minTime) minTime = tk;
+        });
+    });
+    if (!isFinite(minTime)) minTime = tsHoy;
+
+    // Estado histórico acumulado por cada zona
+    const estadoZonas = {};
+    const ordenComunes = [];
+    const ordenParciales = [];
+
+    zonasLimpiezaCache.forEach((z) => {
+        const lista = obtenerListaCanonica(z);
+        const esComun = esZonaComunParaTodos(z);
+        if (esComun) ordenComunes.push(z);
+        else ordenParciales.push(z);
+
+        const conteos = {};
+        const ultimaSem = {};
+        lista.forEach((p, idxP) => {
+            conteos[p] = 0;
+            // Desfase inicial distinto para cada zona para que en la semana 1 arranquen escalonados
+            ultimaSem[p] = -1000 + idxP;
+        });
+
+        estadoZonas[z.id] = {
+            zona: z,
+            lista,
+            esComun,
+            conteos,
+            ultimaSem
+        };
+    });
+
+    // Avanzamos lunes a lunes desde el origen del piso hasta el horizonte requerido
+    let t = minTime;
+    let numSemanaGlobal = 0;
+
+    while (t <= tsMax) {
+        porSemana[t] = {};
+        const ocupadosEnComunes = new Set();
+        const cargaTotalSemana = {};
+        participantesGrupo.forEach(p => cargaTotalSemana[p] = 0);
+
+        const estaActivaEnSemana = (zona) => {
+            const freq = zona.frecuencia || 1;
+            const tsBase = obtenerLunes(new Date(zona.fecha_base));
+            const semDiff = Math.round((t - tsBase) / 604800000);
+            const anclaEx = obtenerAnclaExactaSemana(zona, t);
+            if (anclaEx && (zona.responsables || []).includes(anclaEx)) return true;
+            if (semDiff < 0 || semDiff % freq !== 0) return false;
+            return (zona.responsables || []).length > 0;
+        };
+
+        // 1º. TAREAS COMUNES (Cocina, Salón...):
+        // Primero fijamos las que tengan orden directo del Panel Maestro en esta semana
+        const comunesActivas = ordenComunes.filter(estaActivaEnSemana);
+        const comunesPendientes = [];
+
+        comunesActivas.forEach(z => {
+            const st = estadoZonas[z.id];
+            const forzado = obtenerAnclaExactaSemana(z, t);
+            if (forzado && st.lista.includes(forzado)) {
+                // Reequilibramos el contador al valor mínimo actual para que a partir de este cambio manual todos sigan limpiando las mismas veces
+                const minC = Math.min(...st.lista.map(p => st.conteos[p]));
+                st.lista.forEach(p => { st.conteos[p] = minC; });
+                st.conteos[forzado] = minC + 1;
+                st.ultimaSem[forzado] = numSemanaGlobal;
+
+                porSemana[t][z.id] = forzado;
+                ocupadosEnComunes.add(forzado);
+                cargaTotalSemana[forzado] = (cargaTotalSemana[forzado] || 0) + 1;
+            } else {
+                comunesPendientes.push(z);
+            }
+        });
+
+        // Ahora asignamos el resto de tareas comunes garantizando equidad 100% y 0 choque entre tareas comunes
+        comunesPendientes.forEach((z, idxZ) => {
+            const st = estadoZonas[z.id];
+            const minCount = Math.min(...st.lista.map(p => st.conteos[p]));
+            // Candidatos a los que les toca en este ciclo de la zona (los que menos veces la han hecho)
+            let elegibles = st.lista.filter(p => st.conteos[p] === minCount);
+
+            // Evitamos que la misma persona haga 2 tareas comunes en la misma semana
+            let sinComun = elegibles.filter(p => !ocupadosEnComunes.has(p));
+            if (sinComun.length === 0) {
+                // Si el único que quedaba para cerrar ciclo ya tenía la otra común asignada hoy, abrimos a los del nuevo ciclo libres hoy
+                sinComun = st.lista.filter(p => !ocupadosEnComunes.has(p) && st.conteos[p] <= minCount + 1);
+            }
+            const pool = sinComun.length > 0 ? sinComun : elegibles;
+
+            pool.sort((a, b) => {
+                if (st.conteos[a] !== st.conteos[b]) return st.conteos[a] - st.conteos[b];
+                if (st.ultimaSem[a] !== st.ultimaSem[b]) return st.ultimaSem[a] - st.ultimaSem[b];
+                const idxA = (st.lista.indexOf(a) - idxZ + st.lista.length) % st.lista.length;
+                const idxB = (st.lista.indexOf(b) - idxZ + st.lista.length) % st.lista.length;
+                return idxA - idxB;
+            });
+
+            const elegido = pool[0];
+            st.conteos[elegido]++;
+            st.ultimaSem[elegido] = numSemanaGlobal;
+            porSemana[t][z.id] = elegido;
+            ocupadosEnComunes.add(elegido);
+            cargaTotalSemana[elegido] = (cargaTotalSemana[elegido] || 0) + 1;
+        });
+
+        // 2º. TAREAS PARCIALES (Baño...):
+        // Mantiene igualdad estricta dentro del baño (nadie limpia de más ni de menos),
+        // pero dentro de los que deben turno en el ciclo actual elige siempre a quien esté libre de Cocina y Salón esta semana.
+        const parcialesActivas = ordenParciales.filter(estaActivaEnSemana);
+
+        parcialesActivas.forEach((z, idxP) => {
+            const st = estadoZonas[z.id];
+            const forzado = obtenerAnclaExactaSemana(z, t);
+
+            if (forzado && st.lista.includes(forzado)) {
+                const minC = Math.min(...st.lista.map(p => st.conteos[p]));
+                st.lista.forEach(p => { st.conteos[p] = minC; });
+                st.conteos[forzado] = minC + 1;
+                st.ultimaSem[forzado] = numSemanaGlobal;
+
+                porSemana[t][z.id] = forzado;
+                cargaTotalSemana[forzado] = (cargaTotalSemana[forzado] || 0) + 1;
+                return;
+            }
+
+            // Solo pueden salir elegidos los que llevan menos limpiezas en este baño (garantiza igualdad matemática 100% en cada ciclo de 3 semanas)
+            const minCount = Math.min(...st.lista.map(p => st.conteos[p]));
+            const elegiblesCiclo = st.lista.filter(p => st.conteos[p] === minCount);
+
+            elegiblesCiclo.sort((a, b) => {
+                // Prioridad 1: El que NO tenga ya Cocina o Salón esta misma semana (cargaTotalSemana === 0)
+                const cargaA = cargaTotalSemana[a] || 0;
+                const cargaB = cargaTotalSemana[b] || 0;
+                if (cargaA !== cargaB) return cargaA - cargaB;
+
+                // Prioridad 2: El que lleve más semanas sin limpiar esta zona parcial
+                if (st.ultimaSem[a] !== st.ultimaSem[b]) return st.ultimaSem[a] - st.ultimaSem[b];
+
+                // Prioridad 3: Orden canónico estable
+                const idxA = (st.lista.indexOf(a) + idxP) % st.lista.length;
+                const idxB = (st.lista.indexOf(b) + idxP) % st.lista.length;
+                return idxA - idxB;
+            });
+
+            const elegido = elegiblesCiclo[0];
+            st.conteos[elegido]++;
+            st.ultimaSem[elegido] = numSemanaGlobal;
+            porSemana[t][z.id] = elegido;
+            cargaTotalSemana[elegido] = (cargaTotalSemana[elegido] || 0) + 1;
+        });
+
+        t = sumarDiasCalendario(t, 7);
+        numSemanaGlobal++;
+    }
+
+    cacheSimulacionTurnos = {
+        firma: firmaActual,
+        maxTsCalculado: tsMax,
+        porSemana
+    };
+    return porSemana;
 }
 
 function calcularAsignacionesParaSemana(fechaLunes, ignorarPermutasAisladas = false) {
     const tsLunes = obtenerLunes(fechaLunes);
-    let asignacionesMap = {};
-    let zonasComunesActivas = [];
-    let indiceComunNatural = 0;
-
-    zonasLimpiezaCache.forEach((zona) => {
-        if (!zona.responsables || zona.responsables.length === 0) return;
-        const freq = zona.frecuencia || 1;
-        const tsBase = obtenerLunes(new Date(zona.fecha_base));
-        const semDesdeBase = Math.round((tsLunes - tsBase) / 604800000);
-        const ancla = obtenerAnclaActivaParaSemana(zona, tsLunes);
-
-        if (semDesdeBase < 0 && !ancla) return;
-
-        const esComun = esZonaComunParaTodos(zona);
-        const miIdxComun = esComun ? indiceComunNatural++ : 0;
-        const listaResp = esComun ? obtenerListaCanonicaComun(zona) : zona.responsables;
-
-        let idIdeal = 0;
-        if (ancla) {
-            const semDesdeAncla = Math.round((tsLunes - ancla.tsAncla) / 604800000);
-            if (semDesdeAncla < 0 || semDesdeAncla % freq !== 0) return;
-            const periodos = Math.floor(semDesdeAncla / freq);
-            const idxBase = Math.max(0, listaResp.indexOf(ancla.persona));
-            idIdeal = (idxBase + periodos) % listaResp.length;
-        } else {
-            if (semDesdeBase % freq !== 0) return;
-            const periodos = Math.floor(semDesdeBase / freq);
-            idIdeal = (periodos + (esComun ? miIdxComun : 0)) % listaResp.length;
-        }
-
-        if (!esComun) {
-            const toca = listaResp[idIdeal];
-            asignacionesMap[zona.id] = {
-                idZona: zona.id,
-                nombre_zona: zona.nombre_zona,
-                responsables: zona.responsables,
-                leTocaA: toca,
-                zonaRef: zona,
-                freq: freq,
-                esPermuta: false
-            };
-        } else {
-            zonasComunesActivas.push({
-                zona,
-                listaResp,
-                freq,
-                idIdeal,
-                ancla,
-                miIdxComun
-            });
-        }
-    });
-
-    zonasComunesActivas.sort((a, b) => {
-        const aExacta = a.ancla && a.ancla.tsAncla === tsLunes ? 1 : 0;
-        const bExacta = b.ancla && b.ancla.tsAncla === tsLunes ? 1 : 0;
-        if (aExacta !== bExacta) return bExacta - aExacta;
-
-        const aTs = a.ancla ? a.ancla.tsAncla : -1;
-        const bTs = b.ancla ? b.ancla.tsAncla : -1;
-        if (aTs !== bTs) return bTs - aTs;
-
-        const aPrio = a.ancla ? a.ancla.prio : 0;
-        const bPrio = b.ancla ? b.ancla.prio : 0;
-        if (aPrio !== bPrio) return bPrio - aPrio;
-
-        return a.miIdxComun - b.miIdxComun;
-    });
-
-    let asignadosEnComunes = [];
-    zonasComunesActivas.forEach((item, idxOrden) => {
-        const { zona, listaResp, freq, idIdeal } = item;
-        let startIdx = idIdeal;
-        if (idxOrden > 0 && zonasComunesActivas[0].ancla && !item.ancla) {
-            startIdx = (zonasComunesActivas[0].idIdeal + idxOrden) % listaResp.length;
-        }
-
-        let toca = listaResp[startIdx];
-        for (let j = 0; j < listaResp.length; j++) {
-            const cand = listaResp[(startIdx + j) % listaResp.length];
-            if (!asignadosEnComunes.includes(cand)) {
-                toca = cand;
-                asignadosEnComunes.push(cand);
-                break;
-            }
-        }
-        asignacionesMap[zona.id] = {
-            idZona: zona.id,
-            nombre_zona: zona.nombre_zona,
-            responsables: zona.responsables,
-            leTocaA: toca,
-            zonaRef: zona,
-            freq: freq,
-            esPermuta: false
-        };
-    });
+    const mapaSemanas = construirCalendarioRotacionInteligente(tsLunes);
+    const asignadosBaseSemana = mapaSemanas[tsLunes] || {};
 
     let resultado = [];
     zonasLimpiezaCache.forEach(z => {
-        if (asignacionesMap[z.id]) {
-            const item = asignacionesMap[z.id];
-            if (!ignorarPermutasAisladas) {
-                const permutado = obtenerPermutaAisladaSemana(z, tsLunes);
-                if (permutado && participantesGrupo.includes(permutado)) {
-                    item.leTocaA = permutado;
-                    item.esPermuta = true;
-                }
+        let leTocaA = asignadosBaseSemana[z.id];
+        if (!leTocaA) return;
+
+        let esPermuta = false;
+        if (!ignorarPermutasAisladas) {
+            const permutado = obtenerPermutaAisladaSemana(z, tsLunes);
+            if (permutado && participantesGrupo.includes(permutado)) {
+                leTocaA = permutado;
+                esPermuta = true;
             }
-            resultado.push(item);
         }
+
+        resultado.push({
+            idZona: z.id,
+            nombre_zona: z.nombre_zona,
+            responsables: z.responsables,
+            leTocaA: leTocaA,
+            zonaRef: z,
+            freq: z.frecuencia || 1,
+            esPermuta: esPermuta
+        });
     });
+
     return resultado;
 }
 
