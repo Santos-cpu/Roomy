@@ -1017,6 +1017,14 @@ window.renombrarInquilinoPiso = async function(nombreViejo) {
                 }
             });
 
+            let nuevasAsignaciones = { ...(z.asignaciones_semana || {}) };
+            Object.keys(nuevasAsignaciones).forEach(ts => {
+                if (nuevasAsignaciones[ts] === nombreViejo) {
+                    nuevasAsignaciones[ts] = nuevoNombre;
+                    cambiado = true;
+                }
+            });
+
             if (cambiado) {
                 const zonaRef = doc(db, "grupos", idPisoActual, "zonas_limpieza", z.id);
                 batch.update(zonaRef, {
@@ -1024,7 +1032,8 @@ window.renombrarInquilinoPiso = async function(nombreViejo) {
                     semanas_hechas: nuevasHechas,
                     var_votos: nuevosVar,
                     anclas_turno: nuevasAnclas,
-                    permutas_semana: nuevasPermutas
+                    permutas_semana: nuevasPermutas,
+                    asignaciones_semana: nuevasAsignaciones
                 });
             }
         });
@@ -1285,6 +1294,7 @@ document.getElementById('btnMasterGuardarTurno').addEventListener('click', async
         const nuevasAnclas = { ...(zonaObj.anclas_turno || {}) };
         const nuevasPrios = { ...(zonaObj.anclas_prio || {}) };
         const nuevasPermutas = { ...(zonaObj.permutas_semana || {}) };
+        const nuevasAsignaciones = { ...(zonaObj.asignaciones_semana || {}) };
 
         Object.keys(nuevasAnclas).forEach(tsKey => {
             if (Number(tsKey) >= tsSemana) {
@@ -1292,15 +1302,24 @@ document.getElementById('btnMasterGuardarTurno').addEventListener('click', async
                 delete nuevasPrios[tsKey];
             }
         });
+        Object.keys(nuevasAsignaciones).forEach(tsKey => {
+            if (Number(tsKey) >= tsSemana) {
+                delete nuevasAsignaciones[tsKey];
+            }
+        });
         delete nuevasPermutas[tsSemana];
 
         nuevasAnclas[tsSemana] = nuevoResp;
         nuevasPrios[tsSemana] = Date.now();
+        if (tsSemana <= obtenerLunes(new Date())) {
+            nuevasAsignaciones[tsSemana] = nuevoResp;
+        }
 
         const updateData = {
             anclas_turno: nuevasAnclas,
             anclas_prio: nuevasPrios,
-            permutas_semana: nuevasPermutas
+            permutas_semana: nuevasPermutas,
+            asignaciones_semana: nuevasAsignaciones
         };
 
         const tsBaseActual = obtenerLunes(new Date(zonaObj.fecha_base));
@@ -2311,6 +2330,92 @@ function obtenerListaCanonica(zona) {
     return [...(zona.responsables || [])];
 }
 
+// Fecha de corte (Lunes 16 de Noviembre de 2026):
+// - Antes de esta fecha se conserva la rotación clásica intacta para no alterar el historial ni las faltas pasadas.
+// - A partir de esta fecha entra en vigor el nuevo motor inteligente de rotación y se congela en Firebase el responsable de cada semana.
+const TS_CORTE_NUEVA_ROTACION = new Date(2026, 10, 16, 0, 0, 0, 0).getTime();
+
+function obtenerAsignadoCongeladoSemana(zona, tsLunes) {
+    const asigs = zona.asignaciones_semana || {};
+    if (asigs[tsLunes] !== undefined) return asigs[tsLunes];
+    if (asigs[tsLunes - 3600000] !== undefined) return asigs[tsLunes - 3600000];
+    if (asigs[tsLunes + 3600000] !== undefined) return asigs[tsLunes + 3600000];
+    return undefined;
+}
+
+// Cálculo clásico de turno para semanas anteriores al corte (respeta fecha_base, el desfase entre zonas y el no-choque de la misma semana)
+function calcularTurnosClasicosSemana(tsLunes) {
+    const res = {};
+    const asignadosSemana = [];
+
+    for (let i = 0; i < zonasLimpiezaCache.length; i++) {
+        const zona = zonasLimpiezaCache[i];
+        const resp = zona.responsables || [];
+        if (resp.length === 0) continue;
+
+        const congelado = obtenerAsignadoCongeladoSemana(zona, tsLunes);
+        if (congelado && resp.includes(congelado)) {
+            res[zona.id] = congelado;
+            asignadosSemana.push(congelado);
+            continue;
+        }
+
+        const anclaExacta = obtenerAnclaExactaSemana(zona, tsLunes);
+        if (anclaExacta && resp.includes(anclaExacta)) {
+            res[zona.id] = anclaExacta;
+            asignadosSemana.push(anclaExacta);
+            continue;
+        }
+
+        const freq = zona.frecuencia || 1;
+        const tsBase = obtenerLunes(new Date(zona.fecha_base));
+        const semDiff = Math.round((tsLunes - tsBase) / 604800000);
+        if (semDiff < 0 || semDiff % freq !== 0) continue;
+
+        // Buscar si hubo algún ancla manual en o antes de tsLunes
+        let mejorTsAncla = -Infinity;
+        let respAncla = null;
+        const anclas = zona.anclas_turno || {};
+        Object.keys(anclas).forEach(k => {
+            const tk = obtenerLunes(Number(k));
+            if (tk <= tsLunes && tk >= mejorTsAncla && resp.includes(anclas[k])) {
+                mejorTsAncla = tk;
+                respAncla = anclas[k];
+            }
+        });
+
+        let idIdeal;
+        if (respAncla !== null && isFinite(mejorTsAncla)) {
+            const ciclosDesdeAncla = Math.round((tsLunes - mejorTsAncla) / (604800000 * freq));
+            const idxBase = resp.indexOf(respAncla);
+            idIdeal = ((idxBase + ciclosDesdeAncla) % resp.length + resp.length) % resp.length;
+        } else {
+            const periodos = Math.floor(semDiff / freq);
+            idIdeal = ((periodos + i) % resp.length + resp.length) % resp.length;
+        }
+
+        let toca = resp[idIdeal];
+        let libre = false;
+        for (let j = 0; j < resp.length; j++) {
+            const cand = resp[(idIdeal + j) % resp.length];
+            if (!asignadosSemana.includes(cand)) {
+                toca = cand;
+                asignadosSemana.push(cand);
+                libre = true;
+                break;
+            }
+        }
+        if (!libre) {
+            toca = resp[idIdeal];
+            asignadosSemana.push(toca);
+        }
+
+        res[zona.id] = toca;
+    }
+
+    return res;
+}
+
 // MOTOR DE SIMULACIÓN ACUMULADA:
 // Garantiza que dentro de cada zona (común o parcial) todos limpien exactamente el mismo número de veces,
 // pero en cada semana elige, de entre los que empatan a menos limpiezas en esa zona, a quien NO tenga ya otra tarea esa semana.
@@ -2327,7 +2432,8 @@ function construirCalendarioRotacionInteligente(tsHastaObjetivo) {
             f: z.frecuencia,
             fb: z.fecha_base,
             a: z.anclas_turno,
-            ap: z.anclas_prio
+            ap: z.anclas_prio,
+            as: z.asignaciones_semana
         }))
     });
 
@@ -2352,7 +2458,7 @@ function construirCalendarioRotacionInteligente(tsHastaObjetivo) {
     });
     if (!isFinite(minTime)) minTime = tsHoy;
 
-    // Estado histórico acumulado por cada zona
+    // Estado histórico acumulado por cada zona para la nueva rotación (a partir de TS_CORTE_NUEVA_ROTACION)
     const estadoZonas = {};
     const ordenComunes = [];
     const ordenParciales = [];
@@ -2367,7 +2473,7 @@ function construirCalendarioRotacionInteligente(tsHastaObjetivo) {
         const ultimaSem = {};
         lista.forEach((p, idxP) => {
             conteos[p] = 0;
-            // Desfase inicial distinto para cada zona para que en la semana 1 arranquen escalonados
+            // Desfase inicial distinto para cada zona para que en la semana 1 de la nueva rotación arranquen escalonados
             ultimaSem[p] = -1000 + idxP;
         });
 
@@ -2386,6 +2492,16 @@ function construirCalendarioRotacionInteligente(tsHastaObjetivo) {
 
     while (t <= tsMax) {
         porSemana[t] = {};
+
+        // 1) SEMANAS ANTERIORES A LA FECHA DE CORTE (Mañana, Lunes 16 Nov 2026):
+        // Se mantiene intacto lo que había antes sin aplicar el nuevo motor ni reordenar responsables
+        if (t < TS_CORTE_NUEVA_ROTACION) {
+            porSemana[t] = calcularTurnosClasicosSemana(t);
+            t = sumarDiasCalendario(t, 7);
+            continue;
+        }
+
+        // 2) SEMANAS DESDE LA FECHA DE CORTE EN ADELANTE (NUEVA ROTACIÓN):
         const ocupadosEnComunes = new Set();
         const cargaTotalSemana = {};
         participantesGrupo.forEach(p => cargaTotalSemana[p] = 0);
@@ -2396,18 +2512,22 @@ function construirCalendarioRotacionInteligente(tsHastaObjetivo) {
             const semDiff = Math.round((t - tsBase) / 604800000);
             const anclaEx = obtenerAnclaExactaSemana(zona, t);
             if (anclaEx && (zona.responsables || []).includes(anclaEx)) return true;
+            const congeladoEx = obtenerAsignadoCongeladoSemana(zona, t);
+            if (congeladoEx && (zona.responsables || []).includes(congeladoEx)) return true;
             if (semDiff < 0 || semDiff % freq !== 0) return false;
             return (zona.responsables || []).length > 0;
         };
 
         // 1º. TAREAS COMUNES (Cocina, Salón...):
-        // Primero fijamos las que tengan orden directo del Panel Maestro en esta semana
+        // Primero fijamos las que tengan orden directo del Panel Maestro o ya estén congeladas en esta semana
         const comunesActivas = ordenComunes.filter(estaActivaEnSemana);
         const comunesPendientes = [];
 
         comunesActivas.forEach(z => {
             const st = estadoZonas[z.id];
             const forzado = obtenerAnclaExactaSemana(z, t);
+            const congelado = !forzado && t <= tsHoy ? obtenerAsignadoCongeladoSemana(z, t) : undefined;
+
             if (forzado && st.lista.includes(forzado)) {
                 // Reequilibramos el contador al valor mínimo actual para que a partir de este cambio manual todos sigan limpiando las mismas veces
                 const minC = Math.min(...st.lista.map(p => st.conteos[p]));
@@ -2418,6 +2538,12 @@ function construirCalendarioRotacionInteligente(tsHastaObjetivo) {
                 porSemana[t][z.id] = forzado;
                 ocupadosEnComunes.add(forzado);
                 cargaTotalSemana[forzado] = (cargaTotalSemana[forzado] || 0) + 1;
+            } else if (congelado && st.lista.includes(congelado)) {
+                st.conteos[congelado]++;
+                st.ultimaSem[congelado] = numSemanaGlobal;
+                porSemana[t][z.id] = congelado;
+                ocupadosEnComunes.add(congelado);
+                cargaTotalSemana[congelado] = (cargaTotalSemana[congelado] || 0) + 1;
             } else {
                 comunesPendientes.push(z);
             }
@@ -2462,6 +2588,7 @@ function construirCalendarioRotacionInteligente(tsHastaObjetivo) {
         parcialesActivas.forEach((z, idxP) => {
             const st = estadoZonas[z.id];
             const forzado = obtenerAnclaExactaSemana(z, t);
+            const congelado = !forzado && t <= tsHoy ? obtenerAsignadoCongeladoSemana(z, t) : undefined;
 
             if (forzado && st.lista.includes(forzado)) {
                 const minC = Math.min(...st.lista.map(p => st.conteos[p]));
@@ -2471,6 +2598,14 @@ function construirCalendarioRotacionInteligente(tsHastaObjetivo) {
 
                 porSemana[t][z.id] = forzado;
                 cargaTotalSemana[forzado] = (cargaTotalSemana[forzado] || 0) + 1;
+                return;
+            }
+
+            if (congelado && st.lista.includes(congelado)) {
+                st.conteos[congelado]++;
+                st.ultimaSem[congelado] = numSemanaGlobal;
+                porSemana[t][z.id] = congelado;
+                cargaTotalSemana[congelado] = (cargaTotalSemana[congelado] || 0) + 1;
                 return;
             }
 
@@ -2670,7 +2805,47 @@ window.renderFaltasPolicial = function() {
     lista.innerHTML = html;
 };
 
+// Congela en Firebase a quién le tocó realmente cada tarea desde la fecha de corte (16 Nov 2026) hasta la semana actual,
+// para que futuras ediciones de zonas nunca cambien retroactivamente a quién se le pone la falta de esa semana.
+async function congelarAsignacionesDesdeCorte() {
+    if (!idPisoActual || zonasLimpiezaCache.length === 0 || participantesGrupo.length === 0) return;
+    const tsHoy = obtenerLunes(new Date());
+    if (tsHoy < TS_CORTE_NUEVA_ROTACION) return;
+
+    const mapaSemanas = construirCalendarioRotacionInteligente(tsHoy);
+    const batch = writeBatch(db);
+    let hayCambios = false;
+
+    zonasLimpiezaCache.forEach(z => {
+        let updatesZona = {};
+        let cambioZona = false;
+        let t = TS_CORTE_NUEVA_ROTACION;
+
+        while (t <= tsHoy) {
+            const yaCongelado = obtenerAsignadoCongeladoSemana(z, t);
+            const calculado = (mapaSemanas[t] && mapaSemanas[t][z.id]) ? mapaSemanas[t][z.id] : null;
+            if (!yaCongelado && calculado) {
+                updatesZona[`asignaciones_semana.${t}`] = calculado;
+                if (!z.asignaciones_semana) z.asignaciones_semana = {};
+                z.asignaciones_semana[t] = calculado;
+                cambioZona = true;
+                hayCambios = true;
+            }
+            t = sumarDiasCalendario(t, 7);
+        }
+
+        if (cambioZona) {
+            batch.update(doc(db, "grupos", idPisoActual, "zonas_limpieza", z.id), updatesZona);
+        }
+    });
+
+    if (hayCambios) {
+        try { await batch.commit(); } catch (e) { console.error("Error al fijar asignaciones de la semana:", e); }
+    }
+}
+
 function recalcularStrikesTotales() {
+    congelarAsignacionesDesdeCorte();
     strikesAutomaticos = {};
     ultimosStrikes = {};
     participantesGrupo.forEach(p => {

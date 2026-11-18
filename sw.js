@@ -1,4 +1,4 @@
-const CACHE_NAME = 'roomy-v2.2-retro';
+const CACHE_NAME = 'roomy-v2.3-retro';
 const ASSETS = [
     './',
     './index.html',
